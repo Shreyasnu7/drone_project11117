@@ -1,0 +1,13 @@
+# laptop_ai/requirements.txt
+fastapi==0.95.2
+uvicorn==0.22.0
+websockets==11.0.3
+opencv-python-headless==4.8.1.78
+numpy==1.25.2
+pillow==10.0.1
+ultralytics==8.2.20
+openai==1.0.0
+aiohttp==3.8.4
+torch>=2.1.0  # install GPU wheel matching your CUDA (use pytorch.org recommended wheel)
+tqdm==4.65.0
+aiofiles==23.1.0

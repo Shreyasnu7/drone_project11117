@@ -1,0 +1,8 @@
+pymavlink
+mavsdk
+fastapi
+uvicorn
+requests
+websockets
+opencv-python
+numpy
