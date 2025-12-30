@@ -230,6 +230,7 @@ class RealLLMClient:
             print(f"DEBUGGING LLM: Configuring GenAI with key (Length: {len(api_key)})")
             genai.configure(api_key=api_key)
         
+        last_exception = "No Check Performed"
         for model_name in models_to_try:
             try:
                 print(f"DEBUGGING LLM: Trying Model: {model_name}")
@@ -239,11 +240,12 @@ class RealLLMClient:
             except Exception as e:
                 print(f"DEBUGGING LLM: Failed {model_name} -> {e}")
                 logger.error(f"Gemini {model_name} Error: {e}")
+                last_exception = str(e)
                 # Try next model for ANY error (Auth, 404, etc) to ensure we find a working one
                 continue
         
         # If all failed
-        raise Exception(f"All Gemini Models Failed. Last Error: {last_error}")
+        raise Exception(f"All Gemini Models Failed. Last Error: {last_exception}")
 
     def _call_openai(self, system: str, user: str, client=None) -> str:
         try:
