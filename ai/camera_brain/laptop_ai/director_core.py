@@ -65,11 +65,11 @@ class Director:
         self.frame_skip = FRAME_SKIP or 1
     
     def predict_collision(self, future_points, obstacles):
-    for p in future_points:
-        for ob in obstacles:
-            if np.linalg.norm(p - ob.position) < ob.radius:
-                return True
-    return False
+        for p in future_points:
+            for ob in obstacles:
+                if np.linalg.norm(p - ob.position) < ob.radius:
+                    return True
+        return False
 
     async def start(self):
         await self.ws.connect()
