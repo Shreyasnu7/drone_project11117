@@ -29,17 +29,17 @@ import numpy as np
 from typing import Optional
 
 # Local modules (ensure these files exist or produce them next)
-from laptop_ai.camera_fusion import CameraFusion
-from laptop_ai.gopro_driver import GoProDriver
-from laptop_ai.ai_camera_brain import AICameraBrain
-from laptop_ai.camera_selector import choose_camera_for_request
-from laptop_ai.messaging_client import MessagingClient
-from laptop_ai.vision_tracker import VisionTracker
-from laptop_ai.multimodal_prompter import ask_gpt  # returns validated JSON-like primitive or plan
-from laptop_ai.cinematic_planner import to_safe_primitive  # ensures primitives are clamped/safe
-from laptop_ai.ultra_director import UltraDirector
-from laptop_ai.memory_client import read_memory, write_memory
-from laptop_ai.config import RTSP_URL, AI_CALL_INTERVAL, FRAME_SKIP, TEMP_ARTIFACT_DIR, OPENAI_API_KEY
+from .camera_fusion import CameraFusion
+from .gopro_driver import GoProDriver
+from .ai_camera_brain import AICameraBrain
+from .camera_selector import choose_camera_for_request
+from .messaging_client import MessagingClient
+from .vision_tracker import VisionTracker
+from .multimodal_prompter import ask_gpt  # returns validated JSON-like primitive or plan
+from .cinematic_planner import to_safe_primitive  # ensures primitives are clamped/safe
+from .ultra_director import UltraDirector
+from .memory_client import read_memory, write_memory
+from .config import RTSP_URL, AI_CALL_INTERVAL, FRAME_SKIP, TEMP_ARTIFACT_DIR, OPENAI_API_KEY
 
 # Safety configuration (tweak to your hardware / rules)
 MAX_FRAME_WAIT = 2.0            # seconds to wait to get a frame
