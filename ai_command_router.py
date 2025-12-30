@@ -99,3 +99,43 @@ async def ai_command(payload: dict):
     except Exception as e:
         print(f"❌ ORCHESTRATOR ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+class ShotIntentMemory:
+    @staticmethod
+    def record_outcome(plan_id: str, success: bool, user_rating: int, comments: str):
+        """
+        Closes the loop. 
+        In strict 'Learning' mode, this data would be fed back into the Fine-tuning dataset.
+        For now, we store it in 'memory/learning_log.jsonl'.
+        """
+        import json
+        import os
+        from utils import BASE_DATA_DIR
+        
+        log_path = os.path.join(BASE_DATA_DIR, "memory", "learning_log.jsonl")
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        
+        entry = {
+            "timestamp": 1234567890, # TODO: Real time
+            "plan_id": plan_id,
+            "success": success,
+            "rating": user_rating,
+            "comments": comments
+        }
+        
+        with open(log_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+            
+@router.post("/feedback")
+async def record_feedback(payload: dict):
+    # payload: { "plan_id": "...", "success": true, "rating": 5, "comments": "Good job" }
+    try:
+        ShotIntentMemory.record_outcome(
+            payload.get("plan_id", "unknown"),
+            payload.get("success", True),
+            payload.get("rating", 0),
+            payload.get("comments", "")
+        )
+        return {"status": "recorded", "message": "AI Learning Loop Updated"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

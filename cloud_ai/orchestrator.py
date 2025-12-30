@@ -25,6 +25,12 @@ class CloudOrchestrator:
         Full Pipeline Execution
         """
         user_text = payload.get("text", "")
+        
+        # 🔗 TELEMETRY INJECTION (Context-Aware AI)
+        telemetry = payload.get("telemetry", {})
+        if telemetry:
+             # We append this as system context for the LLM
+             user_text += f"\n[SYSTEM CONTEXT: Altitude={telemetry.get('altitude', 0)}m, Battery={telemetry.get('battery', 0)}%, GPS=({telemetry.get('lat', 0)}, {telemetry.get('lng', 0)})]"
         references = payload.get("media", []) 
         
         # 0. Extract Dynamic Keys

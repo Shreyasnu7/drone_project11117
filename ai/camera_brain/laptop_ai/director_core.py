@@ -216,11 +216,25 @@ class Director:
             self.processing = False
             print(f"=== Finished job {job_id} ===\n")
 
+    def set_frame_source(self, source_func):
+        """Allows injecting a frame source (e.g. from HTTP Video Router)"""
+        self._frame_source = source_func
+
     def _grab_frame(self, rtsp_url: str, timeout_s: float) -> Optional[any]:
         """
-        Attempts to open RTSP/local camera and return a single frame within timeout_s.
-        This runs in a thread (blocking I/O).
+        Attempts to open RTSP/local camera OR read from shared memory buffer.
         """
+        # 1. PRIORITY: In-Memory Buffer (from Radxa Push)
+        if hasattr(self, '_frame_source') and self._frame_source:
+             f = self._frame_source()
+             if f is not None:
+                 # Decode if bytes
+                 if isinstance(f, bytes):
+                     arr = np.frombuffer(f, np.uint8)
+                     return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                 return f
+
+        # 2. Fallback: RTSP / Local
         cap = cv2.VideoCapture(rtsp_url if rtsp_url else 0)
         t0 = time.time()
         while time.time() - t0 < timeout_s:
