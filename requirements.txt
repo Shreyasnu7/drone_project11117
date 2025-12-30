@@ -5,3 +5,5 @@ python-multipart
 websockets
 requests
 google-generativeai
+sqlalchemy
+psycopg2-binary

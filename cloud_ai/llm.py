@@ -217,10 +217,12 @@ class RealLLMClient:
         # User strictly requested gemini-3.0-flash.
         # FOUND IN LOGS: 'models/gemini-3-flash-preview', 'models/gemini-2.5-flash', etc.
         models_to_try = [
-            'gemini-3-flash-preview',      # exact match from logs
-            'gemini-2.5-flash',            # fallback 1
-            'gemini-2.0-flash',            # fallback 2
-            'gemini-flash-latest'          # generic fallback
+            'gemini-3-flash-preview',      # CONFIRMED VALID: Latest Preview
+            'gemini-2.0-flash-exp',        # 2.0 Preview
+            'gemini-1.5-flash',            # Current Standard Fast
+            'gemini-1.5-pro',              # Current Standard Smart
+            'gemini-pro',                  # Legacy
+            'gemini-1.5-flash-latest'      # Fallback
         ]
         
         # FORCE CONFIGURATION (Fix for 'No API_KEY' error)
@@ -241,7 +243,7 @@ class RealLLMClient:
                 continue
         
         # If all failed
-        raise Exception("All Gemini Models Failed")
+        raise Exception(f"All Gemini Models Failed. Last Error: {last_error}")
 
     def _call_openai(self, system: str, user: str, client=None) -> str:
         try:
