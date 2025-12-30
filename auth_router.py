@@ -22,7 +22,20 @@ class RegisterRequest(BaseModel):
 # --- Helper Functions ---
 def load_db():
     if not os.path.exists(DB_FILE):
-        return {}
+        # 🛡️ PERSISTENCE FIX: Seed Default User
+        # On Render Free Tier, files are wiped on restart.
+        # We re-create the admin user every time to ensure login works.
+        default_db = {}
+        # Admin User
+        token = "admin-token-permanent"
+        default_db["admin@drone.com"] = {
+            "username": "Admin",
+            "password": hash_password("password"), # "password"
+            "token": token,
+            "params": {}
+        }
+        return default_db
+        
     try:
         with open(DB_FILE, 'r') as f:
             return json.load(f)
@@ -30,8 +43,11 @@ def load_db():
         return {}
 
 def save_db(db):
-    with open(DB_FILE, 'w') as f:
-        json.dump(db, f)
+    try:
+        with open(DB_FILE, 'w') as f:
+            json.dump(db, f)
+    except Exception as e:
+        print(f"❌ DB SAVE ERROR: {e}")
 
 # --- Routes ---
 # --- Routes ---
