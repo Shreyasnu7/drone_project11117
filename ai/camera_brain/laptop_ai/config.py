@@ -6,7 +6,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Server Config
-VPS_WS = os.getenv("VPS_WS", "wss://drone-server-r0qe.onrender.com/ws")
+VPS_WS = os.getenv("VPS_WS", "wss://drone-server-r0qe.onrender.com/ws/connect/laptop_ai")
 AUTH_TOKEN = os.getenv("AUTH_TOKEN", "dev_token_123")
 API_BASE = os.getenv("API_BASE", "https://drone-server-r0qe.onrender.com")
 

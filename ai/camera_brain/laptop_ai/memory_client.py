@@ -2,7 +2,7 @@
 # Simple memory client for the FastAPI memory endpoints.
 
 import requests
-from .config import API_BASE, AUTH_TOKEN
+from config import API_BASE, AUTH_TOKEN
 
 HEADERS = {"Authorization": AUTH_TOKEN, "Content-Type": "application/json"}
 

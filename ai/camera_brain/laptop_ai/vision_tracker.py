@@ -4,7 +4,7 @@ import time
 import cv2
 import numpy as np
 from ultralytics import YOLO
-from .config import YOLO_MODEL_PATH, FRAME_SKIP, TEMP_ARTIFACT_DIR
+from config import YOLO_MODEL_PATH, FRAME_SKIP, TEMP_ARTIFACT_DIR
 from PIL import Image
 
 os.makedirs(TEMP_ARTIFACT_DIR, exist_ok=True)

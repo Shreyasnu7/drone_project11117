@@ -2,7 +2,7 @@
 import asyncio
 import json
 import websockets
-from .config import VPS_WS, AUTH_TOKEN
+from config import VPS_WS, AUTH_TOKEN
 import time
 
 class MessagingClient:

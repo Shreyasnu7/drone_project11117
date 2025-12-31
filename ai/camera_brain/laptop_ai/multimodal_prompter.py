@@ -3,7 +3,7 @@ import json
 import base64
 import aiohttp
 import time
-from .config import OPENAI_API_KEY, OPENAI_MODEL
+from config import OPENAI_API_KEY, OPENAI_MODEL
 
 # NOTE: using OpenAI official python package is ideal, but here we do aiohttp to keep async control.
 # If you prefer openai library, we can switch to that pattern.
