@@ -1,4 +1,11 @@
-OPENAI_MODEL = "gpt-4o-mini"   # or whichever you can access (gpt-4o, gpt-4o-vision)
+import os
+
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+# Server Config
+VPS_WS = os.getenv("VPS_WS", "wss://your-render-app.onrender.com/ws")
+AUTH_TOKEN = os.getenv("AUTH_TOKEN", "dev_token_123")
+API_BASE = os.getenv("API_BASE", "https://your-render-app.onrender.com")
 
 # YOLO model path (we default to yolov8n.pt). Put the .pt file in laptop_ai/ or change path.
 YOLO_MODEL_PATH = "yolov8n.pt"
