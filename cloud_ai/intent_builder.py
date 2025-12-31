@@ -27,7 +27,7 @@ class IntentBuilder:
             scene_context=inferred.get("scene_context", {}),
             subject_model=inferred.get("subject_model", {}),
 
-            emotional_model=EmotionalModel(**inferred["emotional_model"]),
+            emotional_model=EmotionalModel(**inferred.get("emotional_model", {"vector": {"neutral": 1.0}, "peak_allowed": True})),
 
             camera_plan=CameraPlan(**inferred["camera_plan"]),
 
