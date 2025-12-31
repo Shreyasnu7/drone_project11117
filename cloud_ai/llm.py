@@ -217,9 +217,9 @@ class RealLLMClient:
         # User strictly requested gemini-3.0-flash.
         # FOUND IN LOGS: 'models/gemini-3-flash-preview', 'models/gemini-2.5-flash', etc.
         models_to_try = [
-            'gemini-3.0-flash-preview',    # USER REQUESTED
-            'gemini-3-flash-preview',      # Variant
-            'gemini-2.0-flash-exp',        # The likely real experimental one
+            'gemini-3-flash-preview',      # OFFICIAL DEBUT (Dec 17 2025)
+            'gemini-3.0-flash-preview',    # Variant
+            'gemini-2.0-flash-exp',        # Previous experimental
             'gemini-1.5-flash',            # Working standard
             'gemini-1.5-pro',              # Fallback high quality
             'gemini-pro',                  # Legacy
