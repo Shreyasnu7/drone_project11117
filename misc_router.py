@@ -50,12 +50,15 @@ async def get_drones() -> List[Dict]:
     # So it must be available.
     
     # Real Scan
-    from main import connected_clients # logical guess, or assume it's there
-    # Actually, circular import risk. 
-    # Let's assume the user code had it.
-    # I'll just check if it's defined, or use a safe method.
-    # Reverting to: logic that was there: "for client_id in connected_clients.keys():"
-    # I will rely on that variable being present.
+    # Fix: Import directly from ws_router where it is defined
+    try:
+        from ws_router import connected_clients
+    except ImportError:
+        connected_clients = {}
+    
+    # Actually iterate
+    # from ws_router import connected_clients # redundant but clearer
+
     
     
     try:
