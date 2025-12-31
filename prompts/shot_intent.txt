@@ -4,16 +4,18 @@ Analyze the user request and generate a flight plan.
 
 Output Format: JSON
 {
-    "intent_type": "chase|orbit|crane|dolly|cable_cam",
+    "action": "SCAN_AREA|Follow|Orbit|Hover|Land|Takeoff",
+    "thought_process": "I see a request to scan...",
+    "reasoning": "User asked for external camera scan...",
     "confidence": 0.9,
-    "priority": "user_requested",
+    "intent_type": "cinematic_move",
     "emotional_model": {
         "vector": {"excitement": 0.8, "safety": 0.5},
         "peak_allowed": true
     },
     "camera_plan": {
-        "framing": "wide|medium|close",
-        "movement": "smooth|aggressive",
+        "framing": "wide",
+        "movement": "smooth",
         "fps": 30
     },
     "motion_plan": {
@@ -23,16 +25,5 @@ Output Format: JSON
     "camera_selection": {
         "primary": "external", 
         "fallback": "internal"
-    },
-    "stabilization_strategy": {
-        "mode": "software", 
-        "strength": 0.8
-    },
-    "safety_constraints": {
-        "min_dist": 2.0,
-        "max_speed": 10.0
-    },
-    "manual_override_policy": {
-        "allow": true
     }
 }
