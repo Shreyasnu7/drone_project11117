@@ -60,3 +60,16 @@ async def frame_generator():
 @router.get("/video_feed")
 async def video_feed():
     return StreamingResponse(frame_generator(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+@router.get("/video/current")
+async def get_current_frame():
+    """
+    Robust Snapshot Endpoint for App Polling.
+    Solves 'Black Screen' issue where Image.network fails to handle MJPEG streams.
+    """
+    global _latest_frame
+    if _latest_frame:
+        return Response(content=_latest_frame, media_type="image/jpeg")
+    else:
+        # Return a placeholder or 404 if no frame yet
+        return Response(content=b'', status_code=503)
