@@ -50,6 +50,9 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# Legacy Support: Expose list directly for other modules importing it
+connected_clients = manager.mobile_clients
+
 @router.websocket("/connect/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     print(f"🔌 INCOMING WS CONNECTION: {client_id}")
