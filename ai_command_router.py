@@ -85,12 +85,13 @@ async def ai_command(payload: dict):
         if cmd_type and connected_clients:
             print(f"📡 DISPATCHING TO DRONES: {cmd_type} {cmd_payload}")
             msg = json.dumps({"type": cmd_type, "payload": cmd_payload})
-            for cid, sock in connected_clients.items():
-                if "drone" in cid.lower() or "brain" in cid.lower() or "radxa" in cid.lower():
-                     try:
-                         await sock.send_text(msg)
-                     except:
-                         pass
+            
+            # connected_clients is a List[WebSocket], not a Dict
+            for sock in connected_clients:
+                 try:
+                     await sock.send_text(msg)
+                 except:
+                     pass
 
         return {
             "status": "queued_and_dispatched",
