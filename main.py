@@ -13,9 +13,9 @@ load_dotenv() # Load environment variables from .env file
 
 # --- ROUTER IMPORTS ---
 from ai_router import router as ai_router
-from memory_router import memory_router
-from plan_router import plan_router
-from ws_router import ws_router
+from memory_router import router as memory_router
+from plan_router import router as plan_router
+from ws_router import router as ws_router
 from ai_command_router import router as ai_command_router
 from auth_router import router as auth_router
 from video_router import router as video_router

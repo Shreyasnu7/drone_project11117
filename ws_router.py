@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # ws_router.py
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
@@ -16,8 +15,16 @@ async def connect_client(websocket: WebSocket, client_id: str):
     try:
         while True:
             msg = await websocket.receive_text()
-            print(f"[{client_id}] -> {msg}")
             # Broadcast to all OTHER connected clients (e.g. Drone -> App)
+            # This is a simple BUS.
+            for cid, sock in connected_clients.items():
+                if cid != client_id:
+                     try:
+                         await sock.send_text(msg)
+                     except: pass
+    except WebSocketDisconnect:
+        del connected_clients[client_id]
+        print(f"❌ WS DISCONNECTED: {client_id}")
             print(f"📣 Broadcast from {client_id} to {len(connected_clients)-1} clients")
             for cid, sock in connected_clients.items():
                 if cid != client_id:
