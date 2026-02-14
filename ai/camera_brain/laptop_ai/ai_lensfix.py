@@ -17,3 +17,6 @@ class LensCorrector:
         h, w = frame.shape[:2]
         newK, _ = cv2.getOptimalNewCameraMatrix(self.K, self.D, (w, h), 0)
         return cv2.undistort(frame, self.K, self.D, None, newK)
+
+# Alias
+AILensFix = LensCorrector

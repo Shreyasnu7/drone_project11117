@@ -100,8 +100,6 @@ async def get_media(request: Request):
              
              files.append({"url": url, "type": ftype, "date": date_str})
              
-             files.append({"url": url, "type": ftype, "date": date_str})
-             
     return files
 
 @router.post("/media/upload")

@@ -16,8 +16,7 @@ class PlanGenerator:
             action=raw_action,
             thought_process=ai_result.get("thought_process", "Processing..."),
             reasoning=ai_result.get("reasoning", "AI decision"),
-            style=ai_result.get("style", "neutral"),
-            target=ai_result.get("target"),
-            constraints=ai_result.get("constraints", {}),
+            params=ai_result.get("constraints", {}),
+            emotional_context=ai_result.get("emotional_context", {}),
             confidence=ai_result.get("confidence", 1.0)
         )

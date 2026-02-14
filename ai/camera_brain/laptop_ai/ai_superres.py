@@ -7,3 +7,6 @@ class SuperResEngine:
 
     def upscale(self, frame):
         return cv2.resize(frame, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+
+# Alias
+AISuperRes = SuperResEngine

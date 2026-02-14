@@ -6,6 +6,8 @@ import numpy as np
 from ultralytics import YOLO
 from laptop_ai.config import YOLO_MODEL_PATH, FRAME_SKIP, TEMP_ARTIFACT_DIR
 from PIL import Image
+# RE-WIRED (Audit Fix)
+from laptop_ai.ai_subject_tracker import AISubjectTracker
 
 os.makedirs(TEMP_ARTIFACT_DIR, exist_ok=True)
 
@@ -108,6 +110,13 @@ class VisionTracker:
         self.model = YOLO(self.model_path)  # relies on ultralytics to use GPU if torch.cuda available
         self.frame_count = 0
         self.tracker = SortLikeTracker(max_age=30, iou_threshold=0.3)
+        # RE-WIRED (Audit Fix)
+        # try-except to be safe
+        try:
+             self.tracker_ai = AISubjectTracker()
+             print("✅ AISubjectTracker Active")
+        except:
+             self.tracker_ai = None
         self.target_classes = target_classes if target_classes is not None else [0,1,2]  # person,bike,car default
         self._last_annot_save = 0
 

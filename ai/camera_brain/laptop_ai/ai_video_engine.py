@@ -4,11 +4,11 @@ import cv2
 import numpy as np
 from typing import Dict
 
-from .ai_superres import SuperResEngine
-from .ai_stabilizer import AISmoothStabilizer
-from .ai_colorist import AIColorist
-from .ai_deblur import AIDeblur
-from .ai_lensfix import LensCorrector
+from laptop_ai.ai_superres import SuperResEngine
+from laptop_ai.ai_stabilizer import AIStabilizer as AISmoothStabilizer
+from laptop_ai.ai_colourist import AIColorist
+from laptop_ai.ai_deblur import AIDeblur
+from laptop_ai.ai_lensfix import LensCorrector
 
 class AICinematicVideoEngine:
     """
@@ -44,3 +44,6 @@ class AICinematicVideoEngine:
         frame = self.stabilizer.stabilize(frame)
 
         return frame
+
+# Alias
+AIVideoEngine = AICinematicVideoEngine

@@ -1,6 +1,6 @@
 from pymavlink import mavutil
 
-fc = mavutil.mavlink_connection('/dev/ttyUSB0', baud=57600)
+fc = mavutil.mavlink_connection('/dev/ttyS3', baud=57600)
 fc.wait_heartbeat()
 print("FC connected")
 

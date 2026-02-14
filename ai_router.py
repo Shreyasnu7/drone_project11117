@@ -36,6 +36,8 @@ async def ai_text(req: TextRequest):
 # -----------------------
 @router.post("/image")
 async def ai_image(
+    user_id: str = Form(...),
+    drone_id: str = Form(...),
     files: list[UploadFile] = File(...)
 ):
     # Auto-Cleanup: Remove files older than 5 mins (300s) to free space/ram

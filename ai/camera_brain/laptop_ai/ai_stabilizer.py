@@ -106,6 +106,40 @@ class AIStabilizer:
     def get_smoothed_transform(self):
         return self.last_transform
 
+    # ===================================================================
+    #      COMPATIBILITY LAYER (Adapts to AI Camera Brain API)
+    # ===================================================================
+    def process(self, frame, gyro=None):
+        """
+        Compatibility method: updates estimator and returns STABILIZED frame.
+        """
+        tr = self.update(frame, gyro)
+        return self.apply_transform(frame, tr)
+
+    def apply_transform(self, frame, tr):
+        """
+        Applies the dx, dy, dtheta transform to the frame.
+        """
+        dx = tr["dx"]
+        dy = tr["dy"]
+        dtheta = tr["dtheta"]
+        
+        rows, cols = frame.shape[:2]
+        # Construct affine matrix for rotation + translation
+        # [ cos -sin  dx ]
+        # [ sin  cos  dy ]
+        m = np.zeros((2, 3))
+        m[0, 0] = np.cos(dtheta)
+        m[0, 1] = -np.sin(dtheta)
+        m[0, 2] = dx
+        m[1, 0] = np.sin(dtheta)
+        m[1, 1] = np.cos(dtheta)
+        m[1, 2] = dy
+
+        # Warp
+        stabilized = cv2.warpAffine(frame, m, (cols, rows))
+        return stabilized
+
 # Example usage (requires camera)
 if __name__ == "__main__":
     cap = cv2.VideoCapture(0)

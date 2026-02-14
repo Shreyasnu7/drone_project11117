@@ -117,3 +117,6 @@ def build_cinematic_bezier(start_pos, end_pos, lift=1.2):
     p2 = p0 + direction * (dist * 0.66) + np.array([0, 0, lift])
 
     return BezierCurve(p0, p1, p2, p3)
+
+# Alias
+MotionCurve = BezierCurve

@@ -11,9 +11,10 @@ echo "📦 Force-Reinstalling Pyserial..."
 sudo python3 -m pip install pyserial --break-system-packages --force-reinstall
 sudo python3 -m pip install ydlidar --break-system-packages --force-reinstall
 
-# 2. REMOVED YDLIDAR SDK BUILD (SAVES DISK SPACE)
-# The SDK build was filling the eMMC and failing on Python 3.13.
-# We will run without Lidar for now.
+# 2. INSTALL YDLIDAR (Requested)
+echo "📦 Installing YDLidar SDK..."
+# We use the pip binary which avoids building from source if possible, or builds smaller.
+sudo python3 -m pip install ydlidar --break-system-packages
 
 echo "========================================="
 echo "✅ DEPENDENCIES FIXED."

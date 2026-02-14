@@ -405,7 +405,7 @@ class AdvancedTrackedSubject(TrackedSubject):
         return {
             "id": self.id,
             "bbox": self.bbox.tolist(),
-            "cls": int(self.cls),
+            "cls": self.cls,
             "conf": float(self.conf),
             "center": self.center.tolist(),
             "vel": self.velocity.tolist(),

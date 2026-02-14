@@ -1,10 +1,9 @@
 #!/bin/bash
-echo "========================================"
-echo "💀 KILLING ZOMBIE PROCESSES on ttyS2..."
-sudo fuser -k /dev/ttyS2
-echo "✅ Port Cleared."
-echo "========================================"
-sleep 1
-echo "🚀 STARTING RADXA BRIDGE..."
-# Use Absolute Path to ensure finding the file
-sudo python3 /home/shreyash/drone_project/raxda_bridge/real_bridge_service.py
+echo "💀 Clearing ttyS3..."
+sudo fuser -k /dev/ttyS2 2>/dev/null || true
+sudo fuser -k /dev/ttyS1 2>/dev/null || true
+sudo fuser -k /dev/ttyS3 2>/dev/null || true
+sudo fuser -k /dev/ttyS4 2>/dev/null || true
+sleep 0.5
+echo "🚀 Starting Bridge..."
+exec sudo /usr/bin/python3 /mnt/sdcard/drone_project/raxda_bridge/real_bridge_service.py

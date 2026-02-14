@@ -1,37 +1,12 @@
-from typing import Dict
-from ..core.state import CameraBrainState
-
-
-class FramingEngine:
+class FarmingEngine:
     """
-    Computes subject framing offsets using perceptual rules,
-    not templates.
+    Analyzes visual 'yield' or composition quality.
     """
-
-    def compute(
-        self,
-        state: CameraBrainState,
-        saliency: Dict[str, float],
-        intent_strength: float,
-    ) -> tuple[float, float]:
-        """
-        Returns normalized framing offsets (x, y).
-        """
-
-        subject_weight = saliency.get("subject", 0.7)
-        environment_weight = saliency.get("environment", 0.3)
-
-        lead_factor = state.subject_velocity * 0.4
-        presence_bias = (state.camera_presence - 0.5) * 0.6
-
-        offset_x = (
-            lead_factor * subject_weight
-            + presence_bias * environment_weight
-        )
-
-        offset_y = -0.15 * intent_strength
-
-        state.framing_offset_x = offset_x
-        state.framing_offset_y = offset_y
-
-        return offset_x, offset_y
+    def compute_harvest(self, saliency_map):
+        if saliency_map is None: return 0.0
+        # Real Logic: Average Saliency Intensity
+        # Assuming saliency_map is normalized 0.0-1.0
+        import numpy as np
+        if hasattr(saliency_map, 'mean'):
+            return float(saliency_map.mean())
+        return 0.5 # Default neutral if format unknown

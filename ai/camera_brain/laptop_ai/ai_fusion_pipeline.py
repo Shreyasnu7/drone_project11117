@@ -1,8 +1,8 @@
 # File: laptop_ai/ai_fusion_pipeline.py
-from .ai_hdr_engine import AIHDREngine
-from .ai_noise_reduction import AINoiseReduction
-from .ai_super_resolution import AISuperResolution
-from .ai_depth_estimator import AIDepthEstimator
+from laptop_ai.ai_hdr_engine import AIHDREngine
+from laptop_ai.ai_noise_reduction import AINoiseReduction
+from laptop_ai.ai_super_resolution import AISuperResolution
+from laptop_ai.ai_depth_estimator import AIDepthEstimator
 
 class AIFusionPipeline:
 

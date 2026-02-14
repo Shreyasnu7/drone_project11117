@@ -151,3 +151,6 @@ class SortTracker:
             unmatched_trks.remove(t)
             unmatched_dets.remove(d)
         return matches, unmatched_dets, unmatched_trks
+
+# Alias
+SORTTracker = SortTracker

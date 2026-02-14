@@ -36,6 +36,13 @@ class ShotIntentMemory:
 
         self.preferences.update(deltas)
 
+    def store(self, observation: Dict[str, Any]):
+        """
+        Store a raw observation (ShotIntent usage).
+        """
+        # We treat this as a 'neutral' experience until feedback arrives
+        self.episodic.add(observation, {"neutral": 1.0})
+
     def get_context(self) -> Dict[str, Any]:
         """
         Provides memory context to reasoning layer.
@@ -46,3 +53,6 @@ class ShotIntentMemory:
             "recent_intents": self.episodic.recent(),
             "user_style_bias": prefs,
         }
+
+# Alias for backward compatibility
+IntentMemory = ShotIntentMemory

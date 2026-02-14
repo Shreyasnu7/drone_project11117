@@ -1,57 +1,66 @@
-import serial
-import time
-import glob
+import socket
+import threading
+import subprocess
 import os
 
-print("🕵️ PORT DETECTIVE STARTED")
-print(f"🆔 PID: {os.getpid()}")
+# --- CONFIG ---
+SUBNET = "192.168.0" # Based on your previous IP 192.168.0.8
+RANGE_START = 1
+RANGE_END = 254
+TARGET_PORT = 22 # SSH
 
-# common baud rates
-BAUDS = [57600, 115200, 38400, 19200, 9600]
-ports = glob.glob('/dev/ttyS*') + glob.glob('/dev/ttyAMA*')
+found_devices = []
 
-found_data = False
-
-for port in ports:
-    print(f"\n🔎 Checking {port}...")
+def scan_host(ip):
+    # 1. Ping Check (Fast)
     try:
-        # Quick check at 57600 first
-        s = serial.Serial(port, 57600, timeout=1)
-        data = s.read(100)
-        s.close()
+        # Windows ping uses -n 1, Linux uses -c 1
+        param = '-n' if os.name == 'nt' else '-c'
+        cmd = ['ping', param, '1', '-w', '200', ip]
         
-        if len(data) > 0:
-            print(f"   ✅ FOUND DATA on {port} (Len: {len(data)})!")
-            print(f"   bytes: {data[:20]}")
-            found_data = True
-            # Scan bauds on this port
-            for b in BAUDS:
-                try:
-                    s = serial.Serial(port, b, timeout=2)
-                    print(f"      Attempting Baud {b}...", end='')
-                    d = s.read(50)
-                    s.close()
-                    if len(d) > 0:
-                        # Check for MAVLink magic (0xFE or 0xFD)
-                        if b'\xfe' in d or b'\xfd' in d:
-                            print(f" 🎯 MATCH! MAVLink Header detected!")
-                        else:
-                            print(f" (Data found, unknown format)")
-                    else:
-                        print(" Silence")
-                except:
-                    pass
-        else:
-            print("   ❌ Silence.")
+        # Suppress output
+        startupinfo = None
+        if os.name == 'nt':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             
-    except OSError as e:
-        print(f"   ⚠️ Busy/Error: {e}")
-    except Exception as e:
-        print(f"   ⚠️ Error: {e}")
+        res = subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=startupinfo)
+        
+        if res == 0:
+            # 2. Port Check (If ping responds)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5)
+            result = sock.connect_ex((ip, TARGET_PORT))
+            if result == 0:
+                print(f"✅ FOUND SSH DEVICE: {ip}")
+                found_devices.append(ip)
+            sock.close()
+    except:
+        pass
 
-if not found_data:
-    print("\n💀 NO DATA FOUND ON ANY PORT.")
-    print("Possibilities:")
-    print("1. RX/TX Swapped (Physically)")
-    print("2. brltty service is hijacking ports")
-    print("3. FC is not sending data (wrong TELEM config)")
+def main():
+    print(f"--- SCANNING NETWORK {SUBNET}.x ---")
+    threads = []
+    
+    for i in range(RANGE_START, RANGE_END):
+        ip = f"{SUBNET}.{i}"
+        t = threading.Thread(target=scan_host, args=(ip,))
+        threads.append(t)
+        t.start()
+        
+        # Batch to prevent socket exhaustion
+        if len(threads) % 50 == 0:
+            for t in threads: t.join()
+            threads = []
+            
+    for t in threads: t.join()
+    
+    print("\n--- RESULTS ---")
+    if not found_devices:
+        print("❌ No Radxa found. (Is it powered? Is your PC on the same Wi-Fi?)")
+    else:
+        for ip in found_devices:
+            print(f"🎯  ssh shreyash@{ip}")
+            
+if __name__ == "__main__":
+    main()

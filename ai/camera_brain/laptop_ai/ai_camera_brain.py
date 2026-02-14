@@ -38,6 +38,23 @@ from laptop_ai.ai_exposure_engine import AIExposureEngine
 from laptop_ai.ai_stabilizer import AIStabilizer
 from laptop_ai.ai_scene_classifier import SceneClassifier
 from laptop_ai.ai_color_engine import AIColorEngine
+# RE-WIRED (Audit Fix)
+from laptop_ai.ai_camera_pipeline import AICameraPipeline 
+from laptop_ai.ai_deblur import AIDeblur 
+from laptop_ai.ai_motion_blur_controller import AIMotionBlurController
+from laptop_ai.ai_pipeline.tone_curve.gpu_aces import GPUACESToneCurve
+
+# Farming & Core Brain Wiring (Audit Fix)
+try:
+    try:
+        from farming.farming_engine import FarmingEngine
+        from core.camera_brain import CameraBrain as CameraBrainCore
+    except ImportError:
+        from camera_brain.farming.farming_engine import FarmingEngine
+        from camera_brain.core.camera_brain import CameraBrain as CameraBrainCore
+except ImportError:
+    FarmingEngine = None
+    CameraBrainCore = None
 
 
 class AICameraBrain:
@@ -57,7 +74,24 @@ class AICameraBrain:
         self.exposure = AIExposureEngine()
         self.stabilizer = AIStabilizer()
         self.scene = SceneClassifier()
+        self.stabilizer = AIStabilizer()
+        self.gpu_aces = GPUACESToneCurve()
         self.color = AIColorEngine()
+        
+        # Wired Sub-systems
+        self.farming = FarmingEngine() if FarmingEngine else None
+        self.core_brain = CameraBrainCore() if CameraBrainCore else None
+        
+        # RE-WIRED (Audit Fix)
+        # Import classes locally to avoid circulars if needed, or rely on top-level
+        from laptop_ai.ai_depth_estimator import AIDepthEstimator
+        from laptop_ai.ai_hdr_engine import AIHDREngine
+        
+        self.pipeline = AICameraPipeline()
+        self.deblur = AIDeblur()
+        self.shutter_ctrl = AIMotionBlurController()
+        self.depth_estimator = AIDepthEstimator()
+        self.hdr_engine = AIHDREngine()
 
         # History buffers
         self.last_scene = None

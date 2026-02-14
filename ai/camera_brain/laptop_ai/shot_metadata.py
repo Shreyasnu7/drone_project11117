@@ -17,3 +17,6 @@ class ShotMetadata:
         }
         self.history.append(entry)
         return entry
+
+# Alias for compatibility with director_core and other modules
+ShotMetadataHandler = ShotMetadata

@@ -73,11 +73,7 @@ async def startup_event():
 def read_root():
     return {"status": "Quantum Drone Server Online", "version": "3.0.0"}
 
-@app.get("/media")
-def get_media_items():
-    return [] # Return empty list to prevent App crashes logic
-
-    return {"status": "AI Drone Server Running", "auth": "enabled_inline", "ai": "active"}
+# /media endpoint is handled by misc_router (GET /media) — DO NOT shadow it here
 
 if __name__ == "__main__":
     import uvicorn

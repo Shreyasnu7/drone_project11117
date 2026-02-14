@@ -83,10 +83,19 @@ class FlowFieldAvoidance:
             warped_points.append(safe_p)
 
         # Convert back into a smooth parametric function
-        def sampler(t):
-            """Smooth interpolated curve"""
-            t = np.clip(t, 0, 1)
-            idx = int(t * (samples - 1))
-            return warped_points[idx]
+        return WarpedCurve(warped_points)
 
-        return sampler
+class WarpedCurve:
+    def __init__(self, points):
+        self.points = points
+        self.count = len(points)
+
+    def point(self, t):
+        t = np.clip(t, 0, 1)
+        # Simple linear interpolation or nearest neighbor for now
+        # To match the previous logic:
+        idx = int(t * (self.count - 1))
+        return self.points[idx]
+
+# Alias
+FlowField = FlowFieldAvoidance

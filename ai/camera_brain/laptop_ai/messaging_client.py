@@ -11,7 +11,7 @@ class MessagingClient:
     sends {"id": "<client_id>", "token": AUTH_TOKEN} immediately after connect.
     """
 
-    def __init__(self, client_id="laptop"):
+    def __init__(self, client_id="laptop_vision"):
         self.client_id = client_id
         self.ws = None
         self.connected = False

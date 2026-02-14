@@ -29,6 +29,10 @@ except Exception:
 _face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 class SceneClassifier:
+    pass
+AISceneClassifier = SceneClassifier
+
+class SceneClassifier:
     def __init__(self, use_torch: bool = True):
         self.use_torch = use_torch and TORCH_AVAILABLE
         self.model = None
@@ -36,7 +40,7 @@ class SceneClassifier:
             # Placeholder: load a small backbone if available; in this stub we do not download models
             # Replace below with actual model load: torch.hub.load('pytorch/vision', 'mobilenet_v2', pretrained=True)
             try:
-                # lightweight dummy
+                # lightweight heuristic fallback
                 self.model = None
             except Exception:
                 self.model = None

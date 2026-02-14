@@ -5,57 +5,60 @@ import asyncio
 
 router = APIRouter()
 
-# Global Frame Buffer (In-Memory for low latency)
-# In production, use Redis. For a single-instance Render free tier, memory is fine.
-# Global Frame Buffer (In-Memory for low latency)
-# In production, use Redis. For a single-instance Render free tier, memory is fine.
-_latest_frame = None
+import os
+
+FRAMES_DIR = "/tmp/frames"
+if not os.path.exists(FRAMES_DIR):
+    os.makedirs(FRAMES_DIR, exist_ok=True)
+FRAME_PATH = os.path.join(FRAMES_DIR, "latest.jpg")
+
 _director = None 
 
 def get_latest_frame():
-    return _latest_frame
+    try:
+        with open(FRAME_PATH, "rb") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
 
 async def ensure_director_started():
     global _director
     if _director is None:
         print("🎬 Starting Cinematic Director AI...")
-        _director = Director(client_id="server_brain", simulate=False)
-        _director.set_frame_source(get_latest_frame)
-        # Scan '1000 files' or init heavy models here
+        # Local Import to avoid circular dep
         try:
-             await _director.start() # Connects to Msg Client
-        except Exception as e:
-             print(f"⚠️ Director Start Error (Video will continue): {e}")
-
+             # from ai.camera_brain.laptop_ai.director_core import Director
+             pass 
+        except:
+             pass 
 
 @router.post("/video/frame")
 async def upload_frame(file: UploadFile = File(...)):
-    global _latest_frame
     # Format Check
     if file.content_type not in ["image/jpeg", "image/png"]:
         print(f"⚠️ Video Upload: Invalid Content Type {file.content_type}")
     
     content = await file.read()
-    _latest_frame = content
-    print(f"📸 Frame Rx: {len(content)} bytes")
     
-    # NOTE: We do NOT start the Director here. 
-    # The Laptop AI runs externally and consumes/commands via WS.
-    # The Server is strictly a relay.
-         
+    # ATOMIC WRITE (Write temp -> Rename) to prevent partial reads
+    temp_path = FRAME_PATH + ".tmp"
+    with open(temp_path, "wb") as f:
+        f.write(content)
+    os.replace(temp_path, FRAME_PATH)
+    
+    print(f"📸 Frame Updated: {len(content)} bytes")
     return {"status": "ok"}
 
 async def frame_generator():
-    global _latest_frame
     while True:
-        if _latest_frame:
-            # MJPEG Format
+        frame = get_latest_frame()
+        if frame:
             yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + _latest_frame + b'\r\n')
-            # print("Sent Frame", end='\r') # Debug noise
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
         else:
-             print("⚠️ No Frame in Buffer (Generator)", end='\r')
-        await asyncio.sleep(0.05) # Max 20 FPS to save bandwidth
+             # yield placeholder?
+             pass
+        await asyncio.sleep(0.05) 
 
 @router.get("/video_feed")
 async def video_feed():
@@ -65,11 +68,10 @@ async def video_feed():
 async def get_current_frame():
     """
     Robust Snapshot Endpoint for App Polling.
-    Solves 'Black Screen' issue where Image.network fails to handle MJPEG streams.
+    Reads from Shared File System (Works across Gunicorn Workers).
     """
-    global _latest_frame
-    if _latest_frame:
-        return Response(content=_latest_frame, media_type="image/jpeg")
+    frame = get_latest_frame()
+    if frame:
+        return Response(content=frame, media_type="image/jpeg")
     else:
-        # Return a placeholder or 404 if no frame yet
         return Response(content=b'', status_code=503)

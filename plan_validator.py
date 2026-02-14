@@ -13,7 +13,7 @@ class PlanValidator:
 
     # server/plan_validator.py
 
-    def validate_plan(plan: dict) -> bool:
+    def validate_plan(self, plan: dict) -> bool:
      allowed_actions = {"follow", "orbit", "hover", "track", "move"}
      return plan.get("action") in allowed_actions
 

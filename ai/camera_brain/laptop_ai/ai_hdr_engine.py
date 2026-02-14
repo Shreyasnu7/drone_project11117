@@ -14,7 +14,7 @@ class AIHDREngine:
     def __init__(self):
         # OpenCV HDR components
         self.merge_debevec = cv2.createMergeDebevec()
-        self.tonemap = cv2.createTonemapDurand(1.3)
+        self.tonemap = cv2.createTonemapDrago(1.0, 0.7)
 
     def compute_hdr(self, frames, exposures):
         """

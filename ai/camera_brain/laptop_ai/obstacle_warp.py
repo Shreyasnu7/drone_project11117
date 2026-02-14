@@ -70,7 +70,7 @@ class ObstacleWarp:
                     p[2] += delta
 
         # Build new warped curve
-        from .motion_curve import BezierCurve
+        from laptop_ai.motion_curve import BezierCurve
         warped = BezierCurve(p[0], p[1], p[2], p[3])
         return warped
 

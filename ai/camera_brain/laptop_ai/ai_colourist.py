@@ -24,3 +24,6 @@ class AIColorist:
     def _film_soft_lut(self):
         lut = np.arange(256, dtype=np.uint8)
         return lut
+
+# Alias
+AIColourist = AIColorist
