@@ -18,6 +18,6 @@ psycopg2-binary
 passlib[bcrypt]
 
 # AI / YOLO (Removed: Runs on Laptop)
+
 # Hardware Bridge
 pymavlink
-ultralytics
