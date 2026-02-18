@@ -9,8 +9,10 @@ class GeminiDirector:
     Handles high-level reasoning, intent classification, and complex mission planning.
     """
     def __init__(self, api_key=None):
-        self.api_key = "AIzaSyCEp4LdPnOVSArR64XtFz8-L6f6lOaf2aU" # USER PROVIDED KEY
-        self.model = "gemini-1.5-pro-latest" # Using latest stable
+        self.api_key = os.getenv("GEMINI_API_KEY") # SCRUBBED: Use Env Var
+        self.model = "gemini-3.0-flash-preview" # Updated to Feb 2026 Latest
+        if not self.api_key:
+             print("⚠️ No GEMINI_API_KEY in Environment. AI features will be limited.")
         print(f"✅ Gemini Director Initialized (Model: {self.model})")
 
     def ask_strategy(self, user_prompt, scene_context):
@@ -26,7 +28,7 @@ class GeminiDirector:
         
         # Construct Payload
         scene_str = json.dumps(scene_context)
-        system_prompt = "You are an autonomous drone director. Output ONLY JSON."
+        system_prompt = "You are an autonomous drone director, you have to analyze the enviroment using the live sensor and video feed and think like a true movie crew would think, analyze the enviroment and lighing camera angles drone positions, path of drone and all the important aspects to correctly move the drone and gimbal, and do smart obstacle avoidance using the live camera and sensor feed. Output ONLY JSON."
         full_prompt = f"{system_prompt}\nUser: {user_prompt}\nScene: {scene_str}\nOutput JSON {{mode, params, cinematic_style: {{lut_name: str, contrast: float, saturation: float}}}}."
         
         payload = {
