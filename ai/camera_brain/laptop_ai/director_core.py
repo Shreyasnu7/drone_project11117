@@ -604,9 +604,9 @@ class DirectorCore:
         CAM_WIDTH, CAM_HEIGHT = 1920, 1080 
         
         # --- SOURCE DEFINITIONS ---
-        # 1. Internal Camera (Radxa) - Expecting UDP stream sent to this laptop
-        #    Radxa (192.168.0.11) -> Laptop (0.0.0.0:8554)
-        internal_src = "udp://0.0.0.0:8554" 
+        # 1. Internal Camera (Radxa) - Expecting MJPEG HTTP Stream (UDP was problematic)
+        #    Radxa (192.168.0.11) -> Server (Relay) -> Laptop (Request)
+        internal_src = RTSP_URL # "https://drone-server-r0qe.onrender.com/video_feed"
         
         # 2. GoPro - Expecting UDP stream from GoPro IP
         gopro_ip = getattr(self.gopro, 'ip', '10.5.5.9')
@@ -617,18 +617,39 @@ class DirectorCore:
              self.fusion = CameraFusion()
              
         # --- CONNECT CAMERAS ---
-        # We start with None and let the Retry Logic in the loop handle connection.
-        # This prevents the script from hanging on startup if streams are offline.
         self.cam_internal = None
         self.cam_gopro = None
         
-        print(f"📡 CAMERAS: Waiting for loop to connect...")
+        print(f"📡 CONNECTING CAMERAS...")
         
+        # Try Internal
+        try:
+            print(f"   👉 Connecting Internal (Radxa): {internal_src}...")
+            self.cam_internal = CameraStream(src=internal_src, width=CAM_WIDTH, height=CAM_HEIGHT).start()
+            if not self.cam_internal.working:
+                print(f"   ⚠️ INTERNAL CAMERA (Radxa) NOT DETECTED. (Will keep retrying)")
+                # self.cam_internal.stop() # Keep it alive to retry? CameraStream usually dies if open fails.
+                # Re-instantiate in loop if needed
+        except Exception as e:
+            print(f"   ❌ Internal Cam Error: {e}")
 
-        # Fallback to Webcam if BOTH fail?
-        # Fallback to Webcam? DISABLED (User wants to force Drone Connection)
-        # if (not self.cam_internal or not self.cam_internal.working) ...
-        #     ...
+        # Try GoPro
+        try:
+            print(f"   👉 Connecting GoPro: {gopro_src}...")
+            self.cam_gopro = CameraStream(src=gopro_src, width=CAM_WIDTH, height=CAM_HEIGHT).start()
+            if self.cam_gopro.working:
+                print(f"   ✅ GOPRO CONNECTED. IP: {gopro_ip}")
+            else:
+                 print(f"   ⚠️ GOPRO NOT DETECTED. (Is it on? WiFi connected?)")
+        except Exception as e:
+             print(f"   ❌ GoPro connection failed: {e}")
+
+        if (not self.cam_internal or not self.cam_internal.working) and \
+           (not self.cam_gopro or not self.cam_gopro.working):
+            print("⚠️ BOTH DRONE CAMERAS MISSING. ENTERING 'BLIND MODE' (AI FEATURES ONLY).")
+            # raise Exception("No Drone Camera Found - Halting Execution")
+            # Allow fallback to NO SIGNAL screen (loop handles raw_frame=None)
+            pass
         
         # Video Writer Setup
         fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
@@ -639,8 +660,7 @@ class DirectorCore:
         print(f"🔥 GPU INFERENCE ENGINE: STANDBY (Waiting for frames)")
         
         frame_id = 0
-        last_retry_time = 0
-                
+        
         while True:
             t0 = time.time()
             
@@ -665,29 +685,16 @@ class DirectorCore:
             
             # Handle "No Signal"
             if raw_frame is None:
-                # RETRY LOGIC (Every 5 seconds)
-                if time.time() - last_retry_time > 5.0:
-                    last_retry_time = time.time()
-                    if not self.cam_internal or not self.cam_internal.working:
-                        print(f"🔄 RETRYING DRONE CONNECTION: {internal_src}...")
-                        try: 
-                            if self.cam_internal: self.cam_internal.stop()
-                            self.cam_internal = CameraStream(src=internal_src, width=CAM_WIDTH, height=CAM_HEIGHT).start()
-                        except: pass
-
                 # No Camera -> Show Disconnected Screen
                 import numpy as np
                 blank = np.zeros((720, 1280, 3), np.uint8)
                 cv2.putText(blank, "SEARCHING FOR DRONE VIDEO (UDP)...", (340, 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2)
                 cv2.putText(blank, f"Checking: {internal_src}", (400, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
-                
-                # Show Last Error/Status if retrying
-                if time.time() - last_retry_time < 2.0:
-                     cv2.putText(blank, "Attempting Handshake...", (480, 420), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
-                
-                # Assign to raw_frame so the loop continues and BROADCASTS this image to App
-                raw_frame = blank
-                # continue # REMOVED: Let it fall through to Render & Broadcast
+                cv2.imshow("Laptop AI Director (RTX 5070 Ti)", blank)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+                await asyncio.sleep(0.1)
+                continue
             
             # Resize check (if stream changed)
             h, w = raw_frame.shape[:2]
@@ -753,8 +760,9 @@ class DirectorCore:
                 for box in detections:
                     b = box.xyxy[0].cpu().numpy().astype(int)
                     cv2.rectangle(display_frame, (b[0], b[1]), (b[2], b[3]), (0, 255, 0), 2)
-                    label = f"{self.classifier.names[int(box.cls[0])]} {float(box.conf[0]):.2f}"
-                    cv2.putText(display_frame, label, (b[0], b[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    if self.classifier and hasattr(self.classifier, 'names'):
+                        label = f"{self.classifier.names[int(box.cls[0])]} {float(box.conf[0]):.2f}"
+                        cv2.putText(display_frame, label, (b[0], b[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             
             # Draw Status OSD
             fps = 1.0/(time.time()-t0+1e-9)
@@ -788,13 +796,13 @@ class DirectorCore:
 
             _, buffer = cv2.imencode('.jpg', preview_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
             
-            from laptop_ai.config import API_BASE
             try:
+                from laptop_ai.config import API_BASE
                 async with aiohttp.ClientSession() as session:
                      url = f"{API_BASE}/video/frame"
+                     # Use await to avoid session closed error (accept frame latency)
                      await session.post(url, data=buffer.tobytes(), headers={"Content-Type": "image/jpeg"})
-            except Exception as e:
-                # print(f"Broadcast error: {e}") # Silence to avoid spam
+            except Exception:
                 pass
             
             # Handle Keys
@@ -976,7 +984,6 @@ class DirectorCore:
                         h_dist_m = (raw * TILT_FACTOR) / 1000.0
                         obstacles.append((dx * h_dist_m, dy * h_dist_m))
                         print(f"⚠️ SAFETY: {key.upper()} OBSTACLE at {h_dist_m:.1f}m")
-
                 check_sensor('tof_1', 1.0, 0.0)  # Front
                 check_sensor('tof_2', -1.0, 0.0) # Back
                 check_sensor('tof_3', 0.0, -1.0) # Left
@@ -1295,7 +1302,7 @@ class DirectorCore:
                      # Upload last recording to server for Gallery
                      if hasattr(self, '_last_recording_path') and self._last_recording_path:
                          asyncio.create_task(self._upload_media_to_server(self._last_recording_path))
-                elif cmd in ["FOLLOW", "ORBIT", "DRONIE"]:
+                elif cmd in ["FOLLOW", "ORBIT", "DRONIE", "SCAN_AREA", "SCAN"]:
                      print(f"🎬 SMART SHOT REQUEST: {cmd}")
                      # Route to Autopilot Primitive (or AI Job if complex)
                      if self.autopilot.connected: 
@@ -1370,7 +1377,7 @@ class DirectorCore:
                              print(f"🎥 SWITCHING SOURCE: {new_source.upper()}")
                              if new_source == "external":
                                  # 1. Stop local stream
-                                 if self.cam_stream: 
+                                 if self.cam_stream:
                                      self.cam_stream.stop()
                                      self.cam_stream = None
                                  
@@ -1378,6 +1385,7 @@ class DirectorCore:
                                  try:
                                      from laptop_ai.threaded_camera import CameraStream
                                      # GoPro UDP Stream (Hero 12/13/11 via QR or HTTP)
+                                     # Use HTTP if possible for reliability?
                                      udp_url = f"udp://{getattr(self.gopro, 'ip', '192.168.137.2')}:8554" 
                                      print(f"📡 CONNECTING TO GOPRO UDP: {udp_url}")
                                      self.cam_stream = CameraStream(src=udp_url, width=CAM_WIDTH, height=CAM_HEIGHT, fps=30).start()
@@ -1385,14 +1393,16 @@ class DirectorCore:
                                      print("✅ External Camera Selected (GoPro)")
                                  except Exception as e:
                                      print(f"GoPro Stream Error: {e}")
-                             
+                                     
                              elif new_source == "internal":
                                  self.camera_selector = "MAIN"
                                  # Restart Local Stream
                                  try:
                                      from laptop_ai.threaded_camera import CameraStream
-                                     self.cam_stream = CameraStream(src=0, width=CAM_WIDTH, height=CAM_HEIGHT, fps=30).start()
-                                     print("✅ Internal Camera Selected (Radxa)")
+                                     # Use Cloud Relay URL (RTSP_URL)
+                                     src = RTSP_URL 
+                                     self.cam_stream = CameraStream(src=src, width=CAM_WIDTH, height=CAM_HEIGHT, fps=30).start()
+                                     print(f"✅ Internal Camera Selected (Cloud Relay)")
                                  except Exception as e:
                                      print(f"Switch Error: {e}")
 
@@ -1443,6 +1453,8 @@ class DirectorCore:
                              self.ev_bias = 0.0
                      except Exception as e:
                          print(f"⚠️ CONFIG ERROR: {e}")
+                else:
+                    print(f"⚠️ UNKNOWN COMMAND RECEIVED: {cmd}")
             else:
                 pass 
         except Exception:
@@ -1664,26 +1676,13 @@ class DirectorCore:
                 await asyncio.sleep(0.1)
 
 # --- CLI ---
-    def stop(self):
-        print("🛑 Director Core Stopping...")
-        if self.threaded_yolo:
-             self.threaded_yolo.stop()
-        cv2.destroyAllWindows()
-        print("👋 AI Shutdown Complete.")
-
-# --- CLI ---
 async def main_loop(simulate=False):
     d = DirectorCore(simulation_only=simulate)
     await d.start()
     try:
         while True: await asyncio.sleep(1.0)
-    except (asyncio.CancelledError, KeyboardInterrupt):
+    except asyncio.CancelledError:
         pass
-    finally:
-        d.stop()
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main_loop(simulate=False))
-    except KeyboardInterrupt:
-        pass
+    asyncio.run(main_loop(simulate=False))

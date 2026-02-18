@@ -17,6 +17,7 @@ async def ai_command(payload: dict):
     Structured Pipeline: 
     Input -> Orchestrator -> Plan -> Queue
     """
+    print(f"--> AI COMMAND RECEIVED (Keys: {list(payload.keys())})")
     try:
         # 0. SYSTEM COMMAND BYPASS (For Config/Direct Control)
         if payload.get("provider") == "system":

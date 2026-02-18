@@ -4,8 +4,11 @@ import threading
 import time
 
 class CameraStream:
-    def __init__(self, src=0, width=640, height=480, fps=30):
+    def __init__(self, src=None, width=640, height=480, fps=30):
         # Fix for Windows UDP Stream: Don't force DSHOW for network strings
+        if src is None:
+             raise Exception("CameraStream: 'src' must be specified! (Use src=0 for webcam if intended, do not rely on default)")
+
         if isinstance(src, int):
              self.stream = cv2.VideoCapture(src, cv2.CAP_DSHOW)
         else:

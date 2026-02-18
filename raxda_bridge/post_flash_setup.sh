@@ -36,6 +36,15 @@ sudo apt-get install -y \
     v4l-utils \
     media-ctl \
     i2c-tools \
+    python3-opencv \
+    libopencv-dev \
+    gstreamer1.0-tools \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    python3-gst-1.0 \
+    net-tools \
+    wireless-tools \
     || echo "⚠️ Some packages may already be installed"
 echo "✅ System packages installed"
 
@@ -56,16 +65,42 @@ echo "⚙️ Step 4: Configuring serial port overlays..."
 # Backup original
 sudo cp /boot/armbianEnv.txt /boot/armbianEnv.txt.bak 2>/dev/null || true
 
-# Enable UART2 (ttyS2 for FC) and UART4 (ttyS4 for ESP32)
-if ! grep -q "overlays=uart2 uart4" /boot/armbianEnv.txt 2>/dev/null; then
-    echo "   Adding UART overlays to boot config..."
-    sudo sed -i 's/^overlays=.*/overlays=uart2 uart4/' /boot/armbianEnv.txt
-    # If line doesn't exist, append it
-    if ! grep -q "^overlays=" /boot/armbianEnv.txt; then
-        echo "overlays=uart2 uart4" | sudo tee -a /boot/armbianEnv.txt
-    fi
+# RADXA ZERO 3 - IMX219 OVERLAY UPDATE
+# Try uEnv.txt (Radxa) first, fall back to armbianEnv.txt
+TARGET_ENV="/boot/uEnv.txt"
+if [ ! -f "$TARGET_ENV" ]; then
+    TARGET_ENV="/boot/armbianEnv.txt"
 fi
-echo "✅ Serial overlays configured (requires reboot to apply)"
+
+if [ -f "$TARGET_ENV" ]; then
+    echo "⚙️ Updating Overlays in $TARGET_ENV..."
+    # Add UART2, UART4, I2C3-M0, RADXA-ZERO3-IMX219
+    # Note: IMX219 requires I2C3 usually. Or Just the Overlay.
+    # We append or replace.
+    
+    if grep -q "overlays=" "$TARGET_ENV"; then
+        # Check if already has imx219
+        if ! grep -q "radxa-zero3-imx219" "$TARGET_ENV"; then
+            # Append to end of line
+            sudo sed -i '/^overlays=/ s/$/ radxa-zero3-imx219/' "$TARGET_ENV"
+            echo "✅ Added radxa-zero3-imx219 to overlays"
+        fi
+        # Check UARTs
+        if ! grep -q "uart2" "$TARGET_ENV"; then
+             sudo sed -i '/^overlays=/ s/$/ uart2/' "$TARGET_ENV"
+        fi
+        if ! grep -q "uart4" "$TARGET_ENV"; then
+             sudo sed -i '/^overlays=/ s/$/ uart4/' "$TARGET_ENV"
+        fi
+    else
+        echo "overlays=uart2 uart4 radxa-zero3-imx219" | sudo tee -a "$TARGET_ENV"
+        echo "✅ Created overlays line"
+    fi
+else
+    echo "⚠️ No uEnv.txt found! Manually enable overlays via rsetup."
+fi
+
+echo "✅ Overlays configured (Reboot Required)"
 
 # ===== 5. SERIAL PORT PERMISSIONS =====
 echo ""

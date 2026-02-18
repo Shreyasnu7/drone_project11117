@@ -32,7 +32,7 @@ const char* wifi_ssid = "Seema";          // 2.4GHz WiFi Name
 const char* wifi_password = "Seema1978";  // WiFi Password
 
 WiFiUDP udp;
-IPAddress radxa_ip(192, 168, 0, 12);      // Radxa IP
+IPAddress radxa_ip(192, 168, 0, 11);      // Radxa IP
 uint16_t radxa_port = 8888;
 
 // --- PIN CONFIGURATION ---
