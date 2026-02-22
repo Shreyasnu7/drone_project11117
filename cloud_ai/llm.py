@@ -114,27 +114,51 @@ class RealLLMClient:
             logger.error(error_msg)
             raise Exception(error_msg)
         
-        # User strictly requested gemini-3.0-flash.
+        # TRIMMED: Only 2 models. Previous 7 caused cascading hangs.
         models_to_try = [
-            'gemini-3-flash-preview',
-            'gemini-3.0-flash-preview',
+            'gemini-2.0-flash',
             'gemini-2.0-flash-exp',
-            'gemini-1.5-flash',
-            'gemini-1.5-pro',
-            'gemini-pro',
-            'gemini-1.0-pro'
         ]
         
         if api_key:
             print(f"DEBUGGING LLM: Configuring GenAI with key (Length: {len(api_key)})")
             genai.configure(api_key=api_key)
         
+        import threading
+        
         for model_name in models_to_try:
             try:
                 print(f"DEBUGGING LLM: Trying Model: {model_name}")
                 model = genai.GenerativeModel(model_name)
-                response = model.generate_content(prompt)
-                return self._clean_json(response.text)
+                
+                # FIX: Run generate_content in a thread with 20s timeout.
+                # The deprecated google.generativeai can hang FOREVER.
+                result = [None]
+                error = [None]
+                
+                def _call():
+                    try:
+                        result[0] = model.generate_content(prompt)
+                    except Exception as e:
+                        error[0] = e
+                
+                t = threading.Thread(target=_call)
+                t.start()
+                t.join(timeout=20)  # 20 second hard deadline
+                
+                if t.is_alive():
+                    print(f"DEBUGGING LLM: TIMEOUT on {model_name} (20s) - HANGING!")
+                    logger.error(f"Gemini {model_name} TIMED OUT after 20s")
+                    continue  # Skip to next model
+                
+                if error[0]:
+                    raise error[0]
+                
+                if result[0] is None:
+                    raise Exception("No response received")
+                
+                print(f"DEBUGGING LLM: SUCCESS with {model_name}")
+                return self._clean_json(result[0].text)
             except Exception as e:
                 print(f"DEBUGGING LLM: Failed {model_name} -> {e}")
                 logger.error(f"Gemini {model_name} Error: {e}")

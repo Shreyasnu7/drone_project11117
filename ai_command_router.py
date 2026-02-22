@@ -5,6 +5,10 @@ from plan_router import submit_plan
 from api_schemas import DronePlan
 import logging
 
+
+# ADDED LOGGING TO DEBUG ROUTING
+print("--> AI COMMAND ROUTER LOADED")
+
 router = APIRouter(prefix="/director", tags=["AI-Command"])
 
 # Initialize Orchestrator with REAL AI Client
@@ -17,7 +21,7 @@ async def ai_command(payload: dict):
     Structured Pipeline: 
     Input -> Orchestrator -> Plan -> Queue
     """
-    print(f"--> AI COMMAND RECEIVED (Keys: {list(payload.keys())})")
+    print(f"--> AI COMMAND HANDLER ENTERED. Payload Keys: {list(payload.keys())}")
     try:
         # 0. SYSTEM COMMAND BYPASS (For Config/Direct Control)
         if payload.get("provider") == "system":
