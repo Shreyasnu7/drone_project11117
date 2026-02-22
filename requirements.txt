@@ -5,7 +5,7 @@ pydantic
 python-multipart
 websockets
 requests
-google-generativeai>=0.8.3
+google-genai
 openai
 python-dotenv
 httpx

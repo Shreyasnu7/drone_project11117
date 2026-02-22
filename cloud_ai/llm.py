@@ -4,23 +4,27 @@ import json
 import logging
 from fastapi import HTTPException
 
+# ============================================
+# MIGRATED: google-generativeai -> google-genai
+# The old library was deprecated Aug 2025.
+# New SDK: from google import genai
+# ============================================
+
 GENAI_IMPORT_ERROR = None
+genai = None
+
 try:
-    import google.generativeai as genai
-    print("DEBUG: Successfully imported google.generativeai")
+    from google import genai as google_genai
+    genai = google_genai
+    print("DEBUG: Successfully imported google.genai (NEW SDK)")
 except ImportError as e:
-    genai = None
     GENAI_IMPORT_ERROR = str(e)
-    print(f"CRITICAL ERROR: Could not import google.generativeai: {e}")
+    print(f"CRITICAL ERROR: Could not import google.genai: {e}")
 
 try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
-
-# ... (logging config)
-
-
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
@@ -33,11 +37,12 @@ class RealLLMClient:
         
         self.gemini_configured = False
         self.openai_client = None
+        self.gemini_client = None
 
         if self.gemini_key and genai:
-            genai.configure(api_key=self.gemini_key)
+            self.gemini_client = genai.Client(api_key=self.gemini_key)
             self.gemini_configured = True
-            logger.info("✅ Gemini Client Configured")
+            logger.info("✅ Gemini Client Configured (NEW SDK)")
 
         if self.openai_key and OpenAI:
             self.openai_client = OpenAI(api_key=self.openai_key)
@@ -48,7 +53,7 @@ class RealLLMClient:
         Unified chat interface.
         Returns raw JSON string response.
         """
-        last_error = "No Real AI Available" # Track the specific error
+        last_error = "No Real AI Available"
 
         # DEBUG: Verify Keys
         print(f"DEBUGGING LLM: Provider={provider}")
@@ -71,7 +76,6 @@ class RealLLMClient:
              
              elif client_gemini_key:
                  try:
-                    # Configure execution...
                     return self._call_gemini(full_prompt, api_key=client_gemini_key)
                  except Exception as e:
                     logger.error(f"Client Gemini Key Failed: {e}")
@@ -114,51 +118,32 @@ class RealLLMClient:
             logger.error(error_msg)
             raise Exception(error_msg)
         
-        # TRIMMED: Only 2 models. Previous 7 caused cascading hangs.
+        # Models ordered by preference (Gemini 3 Flash first as user requested)
         models_to_try = [
+            'gemini-3.0-flash-preview',
             'gemini-2.0-flash',
             'gemini-2.0-flash-exp',
         ]
         
-        if api_key:
-            print(f"DEBUGGING LLM: Configuring GenAI with key (Length: {len(api_key)})")
-            genai.configure(api_key=api_key)
+        # Create client with the provided API key
+        client = genai.Client(api_key=api_key) if api_key else self.gemini_client
+        if not client:
+            raise Exception("No Gemini Client Available (No API Key)")
         
-        import threading
+        print(f"DEBUGGING LLM: Using API key (Length: {len(api_key) if api_key else 0})")
         
         for model_name in models_to_try:
             try:
                 print(f"DEBUGGING LLM: Trying Model: {model_name}")
-                model = genai.GenerativeModel(model_name)
                 
-                # FIX: Run generate_content in a thread with 20s timeout.
-                # The deprecated google.generativeai can hang FOREVER.
-                result = [None]
-                error = [None]
-                
-                def _call():
-                    try:
-                        result[0] = model.generate_content(prompt)
-                    except Exception as e:
-                        error[0] = e
-                
-                t = threading.Thread(target=_call)
-                t.start()
-                t.join(timeout=20)  # 20 second hard deadline
-                
-                if t.is_alive():
-                    print(f"DEBUGGING LLM: TIMEOUT on {model_name} (20s) - HANGING!")
-                    logger.error(f"Gemini {model_name} TIMED OUT after 20s")
-                    continue  # Skip to next model
-                
-                if error[0]:
-                    raise error[0]
-                
-                if result[0] is None:
-                    raise Exception("No response received")
+                # NEW SDK: client.models.generate_content()
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
                 
                 print(f"DEBUGGING LLM: SUCCESS with {model_name}")
-                return self._clean_json(result[0].text)
+                return self._clean_json(response.text)
             except Exception as e:
                 print(f"DEBUGGING LLM: Failed {model_name} -> {e}")
                 logger.error(f"Gemini {model_name} Error: {e}")
@@ -191,4 +176,3 @@ def ask_ai(prompt, context=None):
     client = RealLLMClient()
     payload = {"prompt": prompt, "context": context or {}}
     return json.loads(client.chat("You are a helper.", json.dumps(payload)))
-
