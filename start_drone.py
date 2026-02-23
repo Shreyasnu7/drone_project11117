@@ -8,6 +8,11 @@ sys.path.append(project_root)
 sys.path.append(os.path.join(project_root, 'ai', 'camera_brain'))
 sys.path.append(os.path.join(project_root, 'ai', 'camera_brain', 'laptop_ai'))
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env file FIRST before any AI models initialize
+load_dotenv(os.path.join(project_root, '.env'))
+
 from ai.camera_brain.laptop_ai.director_core import DirectorCore
 
 async def main():
