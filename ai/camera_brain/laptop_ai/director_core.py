@@ -82,7 +82,10 @@ from laptop_ai.camera_director import CameraDirector
 # WIRED: ADVANCED AI MODELS (DeepStream, Pi0, Gemini)
 from laptop_ai.deepstream_handler import DeepStreamHandler
 from laptop_ai.pi0_pilot import Pi0Pilot
-from laptop_ai.gemini_live_brain import GeminiLiveBrain
+# from laptop_ai.gemini_live_brain import GeminiLiveBrain # REMOVED
+from core.state import EnvironmentState
+from outputs.camera_command import CameraCommand
+from local_er_brain import LocalERBrain  # Replaces gemini_live_brain
 # Add cloud_ai path if needed, or assume relative import works if cloud_ai is sibling
 try:
     from cloud_ai.gemini_director import GeminiDirector
@@ -153,12 +156,6 @@ class ThreadedYOLO:
         self.running = False
         if self.thread.is_alive():
             self.thread.join(timeout=1.0)
-
-    def update(self, frame):
-        """Push a new frame for inference."""
-        if frame is None: return
-        with self.lock:
-            self.frame = frame.copy()
 
     def get_latest_detections(self):
         """Get the most recent detection results."""
@@ -459,12 +456,12 @@ class DirectorCore:
         try:
            self.gemini = GeminiDirector(api_key=os.getenv("GEMINI_API_KEY"))
         except:
-           self.gemini = None
-        
-        # GEMINI LIVE BRAIN — Continuous autonomous AI
-        self.gemini_brain = GeminiLiveBrain(api_key=os.getenv("GEMINI_API_KEY"))
-        self.gemini_brain.start()  # Start background brain thread
-        self._brain_override = True  # Allow brain to control drone when True
+           self.autopilot = MavlinkExecutor()
+
+        # TWO-BRAIN ARCHITECTURE: Brain 1 (Local ER)
+        # Brain 2 (Gemini 3 Flash Cloud) sends intents to this local brain
+        self.er_brain = LocalERBrain()
+        self._brain_override = True  # ER Brain takes precedence on navigation
            
         print(f"✅ Advanced AI Models Instantiated (Pi0: {self.pi0_pilot.model_type}, DS: {self.deepstream.mode}, Brain: ONLINE)")
 
@@ -482,22 +479,23 @@ class DirectorCore:
 
     async def start(self):
         """
-        Starts the Director Core services (Messaging, Vision, etc.)
+        Launch all concurrent loops (Vision, Reasoning, Messaging).
         """
-        print("🚀 Starting Director Core Services...")
+        print("🚀 Director Core Starting...")
         
-        # Start Media Server
-        if self.media_server:
-            asyncio.create_task(self.media_server.start())
-
-        # Register Packet Handler
-        self.ws.add_recv_handler(self._handle_packet)
+        # 1. Start Vision Loop (Camera + UI)
+        asyncio.create_task(self._vision_loop())
         
-        # Connect to Messaging Server (VPS)
-        await self.ws.connect()
+        # 2. Start Autonomous Brain (Idle thoughts)
+        asyncio.create_task(self._autonomous_reasoning_loop())
         
-        # Start Polling (Backup if WS fails)
-        asyncio.create_task(self._poll_for_jobs())
+        # 3. Connect Messaging
+        # (MessagingClient usually connects on first send or background)
+        print("✅ Director Loops Active.")
+        
+        # Start Local ER Brain Model in background thread
+        if hasattr(self, 'er_brain'):
+            self.er_brain.connect()
 
     def _load_cinematic_library(self):
         """
@@ -526,27 +524,6 @@ class DirectorCore:
                      if file.endswith(".json") or file.endswith(".lut"):
                          pass # Placeholder for loading logic
 
-        # Start Autonomous Logic (The "Brain")
-        # Moved to end of __init__ to avoid orphan code execution
-        # asyncio.create_task(self._autonomous_reasoning_loop())
-        # print("Director: connected to messaging service and vision loop started.")
-        # self.autopilot.connect()
-
-    async def start(self):
-        """
-        Launch all concurrent loops (Vision, Reasoning, Messaging).
-        """
-        print("🚀 Director Core Starting...")
-        
-        # 1. Start Vision Loop (Camera + UI)
-        asyncio.create_task(self._vision_loop())
-        
-        # 2. Start Autonomous Brain (Idle thoughts)
-        asyncio.create_task(self._autonomous_reasoning_loop())
-        
-        # 3. Connect Messaging
-        # (MessagingClient usually connects on first send or background)
-        print("✅ Director Loops Active.")
     async def _autonomous_reasoning_loop(self):
         """
         P2.2: The "Idle Mind" of the AI.
@@ -807,68 +784,50 @@ class DirectorCore:
                         vz = (pi0_commands.get('throttle', 0.5) - 0.5) * 2.0  # -1 to 1 m/s vertical
                         self.autopilot.send_velocity(vx, vy, vz)
 
-            # 4a. GEMINI LIVE BRAIN — Feed frame + get autonomous decisions
-            if hasattr(self, 'gemini_brain') and self.gemini_brain and self.gemini_brain.connected:
-                # Feed current frame + sensor data to the brain
+            # 4a. LOCAL ER BRAIN (QWEN2.5-VL) — Continuous fast spatial decisions
+            if hasattr(self, 'er_brain') and self.er_brain and self.er_brain.connected:
+                # Feed frame + sensor data to local ER
                 sensor_state = getattr(self, 'current_environment_state', {})
                 det_list = []
-                for d in (detections[:10] if detections else []):
+                for d in (detections[:5] if detections else []):
                     try:
                         if isinstance(d, (list, tuple)):
-                            det_list.append({"class": str(d[0]), "bbox": list(d[1:5]), "confidence": float(d[-1]) if len(d) > 5 else 0.5})
+                            det_list.append({"class": str(d[0]), "confidence": float(d[-1]) if len(d) > 5 else 0.5})
                         elif hasattr(d, 'cls'):
                             det_list.append({"class": str(int(d.cls[0])), "confidence": float(d.conf[0])})
                     except:
                         pass
-                self.gemini_brain.feed(raw_frame, sensor_state, det_list)
+                self.er_brain.update_state(raw_frame, sensor_state, det_list)
                 
                 # Consume latest brain decision (if available)
-                if self._brain_override and frame_id % 5 == 0:  # Check every 5 frames
-                    decision = self.gemini_brain.get_latest_decision()
+                if self._brain_override and frame_id % 3 == 0:  # Check constantly
+                    decision = self.er_brain.get_latest_decision()
                     if decision and hasattr(self, 'autopilot'):
                         flight = decision.get('flight', {})
                         
-                        # SAFETY: Emergency obstacle alert overrides everything
+                        # SAFETY: ER obstacle alert
                         if decision.get('obstacle_alert'):
-                            print(f"🚨 BRAIN OBSTACLE ALERT: {decision.get('reasoning', '')[:100]}")
-                            self.autopilot.send_velocity(0, 0, 0)  # STOP
+                            print(f"🚨 ER OBSTACLE AVOIDANCE: {decision.get('reasoning', '')[:80]}")
+                            self.autopilot.send_velocity(0, 0, 0)
                         elif flight.get('hover') or flight.get('stop'):
                             self.autopilot.send_velocity(0, 0, 0)
                         else:
-                            # Extract velocities from whatever keys Gemini decided to use
-                            vx = float(flight.get('vx', flight.get('forward', flight.get('velocity_x', 0))))
-                            vy = float(flight.get('vy', flight.get('lateral', flight.get('velocity_y', 0))))
-                            vz = float(flight.get('vz', flight.get('vertical', flight.get('altitude_change', 0))))
-                            yaw = float(flight.get('yaw_rate', flight.get('yaw', flight.get('rotation', 0))))
+                            # ER controls velocity purely via local VLM inference
+                            vx = float(flight.get('vx', 0))
+                            vy = float(flight.get('vy', 0))
+                            vz = float(flight.get('vz', 0))
+                            yaw = float(flight.get('yaw_rate', 0))
                             self.autopilot.send_velocity(vx, vy, vz, yaw_rate=yaw)
                         
-                        # Apply gimbal if present
+                        # Apply ER gimbal
                         gimbal = decision.get('gimbal', {})
                         if gimbal and hasattr(self.autopilot, 'set_gimbal'):
-                            pitch = float(gimbal.get('pitch', gimbal.get('tilt', 0)))
-                            yaw_g = float(gimbal.get('yaw', gimbal.get('pan', 0)))
+                            pitch = float(gimbal.get('pitch', 0))
+                            yaw_g = float(gimbal.get('yaw', 0))
                             self.autopilot.set_gimbal(pitch, yaw_g)
                         
-                        # Apply camera AI directives if present
-                        camera_ai = decision.get('camera_ai', {})
-                        if camera_ai:
-                            # Forward AI module directives to available modules
-                            if hasattr(self, 'ai_color_engine') and self.ai_color_engine:
-                                color = camera_ai.get('color_grading') or camera_ai.get('color')
-                                if color:
-                                    try: self.ai_color_engine.apply_style(color)
-                                    except: pass
-                            if hasattr(self, 'ai_exposure') and self.ai_exposure:
-                                exposure = camera_ai.get('exposure')
-                                if exposure:
-                                    try: self.ai_exposure.set_params(exposure)
-                                    except: pass
-                        
-                        if frame_id % 150 == 0:  # Log every ~5 seconds
-                            print(f"🧠 BRAIN: {decision.get('reasoning', '')[:100]}")
-            elif hasattr(self, 'gemini_brain') and self.gemini_brain and frame_id % 60 == 0:
-                # Feed frame even when not connected yet (will be queued)
-                self.gemini_brain.feed(raw_frame, getattr(self, 'current_environment_state', {}), [])
+                        if frame_id % 90 == 0:  # Log status every ~3 seconds
+                            print(f"🧠 ER Brain: {decision.get('reasoning', '')[:100]}")
 
             # RENDER (Handled inline below)
             
@@ -1843,8 +1802,12 @@ class DirectorCore:
             "user_id": user_id,
             "drone_id": drone_id,
             "primitive": primitive,
-            "meta": {"source": "laptop", "reason": reason, "ts": time.time()}
+            # Send new cinematic intent from Gemini (Cloud) to Qwen (Local ER)
         }
+        if "TRACK" in primitive.get("action", "") or "CINEMATIC" in primitive.get("action", ""):
+            self.er_brain.set_director_intent(f"Intent from Cloud Director: {primitive.get('action')} - {', '.join(f'{k}={v}' for k, v in primitive.get('params', {}).items())}")
+            
+        packet["meta"] = {"source": "laptop", "reason": reason, "ts": time.time()}
         
         def safe_serialize(obj):
             if hasattr(obj, 'tolist'): return obj.tolist()
