@@ -58,9 +58,12 @@ class LocalERBrain:
         logger.info(f"Loading {self.model_id} into VRAM... (Using approx 5GB)")
         try:
             # Load model and processor to RTX 5070 Ti (cuda)
+            # Fix Windows OS Error 1455 (Paging File): Bypass `accelerate`'s mmap which crashes on Windows
+            # Load sequentially into standard tensor memory then blast to GPU
             self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-                self.model_id, torch_dtype="auto", device_map="auto"
-            )
+                self.model_id, 
+                torch_dtype=torch.float16
+            ).to("cuda")
             self.processor = AutoProcessor.from_pretrained(self.model_id)
             self.connected = True
             self.worker_thread.start()
