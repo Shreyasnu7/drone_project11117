@@ -128,6 +128,10 @@ class GeminiLiveBrain:
         self._thread.start()
         logger.info("🧠 GeminiLiveBrain thread started")
 
+    def connect(self):
+        """Alias for start() used by DirectorCore wiring."""
+        self.start()
+
     def stop(self):
         """Stop the brain."""
         self.running = False

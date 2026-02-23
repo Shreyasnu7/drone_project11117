@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file FIRST before any AI models initialize
 load_dotenv(os.path.join(project_root, '.env'))
+# Fallback: if the user put their key in the template file, load that too
+load_dotenv(os.path.join(project_root, '.env.template'))
 
 from ai.camera_brain.laptop_ai.director_core import DirectorCore
 
