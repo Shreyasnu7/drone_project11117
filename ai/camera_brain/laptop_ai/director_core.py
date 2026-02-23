@@ -82,6 +82,7 @@ from laptop_ai.camera_director import CameraDirector
 # WIRED: ADVANCED AI MODELS (DeepStream, Pi0, Gemini)
 from laptop_ai.deepstream_handler import DeepStreamHandler
 from laptop_ai.pi0_pilot import Pi0Pilot
+from laptop_ai.gemini_live_brain import GeminiLiveBrain
 # Add cloud_ai path if needed, or assume relative import works if cloud_ai is sibling
 try:
     from cloud_ai.gemini_director import GeminiDirector
@@ -94,7 +95,7 @@ except ImportError:
         GeminiDirector = None
 
 print("✅ Medium Priority AI Modules Loaded: Motion, Mavlink, Render, ShotPlanner, Safety, Recorder, CamDirector, Metadata")
-print("✅ Advanced AI Models Loaded: DeepStream, Pi0-FAST, Gemini 3.0")
+print("✅ Advanced AI Models Loaded: DeepStream, Pi0-FAST, Gemini Live Brain")
 
 # === CRITICAL CAMERA AI MODULES (WIRING PHASE 3) ===
 try:
@@ -459,8 +460,13 @@ class DirectorCore:
            self.gemini = GeminiDirector(api_key=os.getenv("GEMINI_API_KEY"))
         except:
            self.gemini = None
+        
+        # GEMINI LIVE BRAIN — Continuous autonomous AI
+        self.gemini_brain = GeminiLiveBrain(api_key=os.getenv("GEMINI_API_KEY"))
+        self.gemini_brain.start()  # Start background brain thread
+        self._brain_override = True  # Allow brain to control drone when True
            
-        print(f"✅ Advanced AI Models Instantiated (Pi0: {self.pi0_pilot.model_type}, DS: {self.deepstream.mode})")
+        print(f"✅ Advanced AI Models Instantiated (Pi0: {self.pi0_pilot.model_type}, DS: {self.deepstream.mode}, Brain: ONLINE)")
 
         # Load Cinematic Assets
         self._load_cinematic_library()
@@ -800,6 +806,69 @@ class DirectorCore:
                         vy = pi0_commands.get('roll', 0) * scale
                         vz = (pi0_commands.get('throttle', 0.5) - 0.5) * 2.0  # -1 to 1 m/s vertical
                         self.autopilot.send_velocity(vx, vy, vz)
+
+            # 4a. GEMINI LIVE BRAIN — Feed frame + get autonomous decisions
+            if hasattr(self, 'gemini_brain') and self.gemini_brain and self.gemini_brain.connected:
+                # Feed current frame + sensor data to the brain
+                sensor_state = getattr(self, 'current_environment_state', {})
+                det_list = []
+                for d in (detections[:10] if detections else []):
+                    try:
+                        if isinstance(d, (list, tuple)):
+                            det_list.append({"class": str(d[0]), "bbox": list(d[1:5]), "confidence": float(d[-1]) if len(d) > 5 else 0.5})
+                        elif hasattr(d, 'cls'):
+                            det_list.append({"class": str(int(d.cls[0])), "confidence": float(d.conf[0])})
+                    except:
+                        pass
+                self.gemini_brain.feed(raw_frame, sensor_state, det_list)
+                
+                # Consume latest brain decision (if available)
+                if self._brain_override and frame_id % 5 == 0:  # Check every 5 frames
+                    decision = self.gemini_brain.get_latest_decision()
+                    if decision and hasattr(self, 'autopilot'):
+                        flight = decision.get('flight', {})
+                        
+                        # SAFETY: Emergency obstacle alert overrides everything
+                        if decision.get('obstacle_alert'):
+                            print(f"🚨 BRAIN OBSTACLE ALERT: {decision.get('reasoning', '')[:100]}")
+                            self.autopilot.send_velocity(0, 0, 0)  # STOP
+                        elif flight.get('hover') or flight.get('stop'):
+                            self.autopilot.send_velocity(0, 0, 0)
+                        else:
+                            # Extract velocities from whatever keys Gemini decided to use
+                            vx = float(flight.get('vx', flight.get('forward', flight.get('velocity_x', 0))))
+                            vy = float(flight.get('vy', flight.get('lateral', flight.get('velocity_y', 0))))
+                            vz = float(flight.get('vz', flight.get('vertical', flight.get('altitude_change', 0))))
+                            yaw = float(flight.get('yaw_rate', flight.get('yaw', flight.get('rotation', 0))))
+                            self.autopilot.send_velocity(vx, vy, vz, yaw_rate=yaw)
+                        
+                        # Apply gimbal if present
+                        gimbal = decision.get('gimbal', {})
+                        if gimbal and hasattr(self.autopilot, 'set_gimbal'):
+                            pitch = float(gimbal.get('pitch', gimbal.get('tilt', 0)))
+                            yaw_g = float(gimbal.get('yaw', gimbal.get('pan', 0)))
+                            self.autopilot.set_gimbal(pitch, yaw_g)
+                        
+                        # Apply camera AI directives if present
+                        camera_ai = decision.get('camera_ai', {})
+                        if camera_ai:
+                            # Forward AI module directives to available modules
+                            if hasattr(self, 'ai_color_engine') and self.ai_color_engine:
+                                color = camera_ai.get('color_grading') or camera_ai.get('color')
+                                if color:
+                                    try: self.ai_color_engine.apply_style(color)
+                                    except: pass
+                            if hasattr(self, 'ai_exposure') and self.ai_exposure:
+                                exposure = camera_ai.get('exposure')
+                                if exposure:
+                                    try: self.ai_exposure.set_params(exposure)
+                                    except: pass
+                        
+                        if frame_id % 150 == 0:  # Log every ~5 seconds
+                            print(f"🧠 BRAIN: {decision.get('reasoning', '')[:100]}")
+            elif hasattr(self, 'gemini_brain') and self.gemini_brain and frame_id % 60 == 0:
+                # Feed frame even when not connected yet (will be queued)
+                self.gemini_brain.feed(raw_frame, getattr(self, 'current_environment_state', {}), [])
 
             # RENDER (Handled inline below)
             
