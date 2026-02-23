@@ -129,7 +129,10 @@ class Pi0Pilot:
             elif path.endswith(".pt") and torch_available:
                 try:
                     device = "cuda" if torch.cuda.is_available() else "cpu"
-                    self.model = torch.load(path, map_location=device)
+                    try:
+                        self.model = torch.jit.load(path, map_location=device)
+                    except:
+                        self.model = torch.load(path, map_location=device)
                     self.model.eval()
                     self.model_type = "pytorch"
                     logger.info(f"🚀 Pi0-FAST: PyTorch model loaded from {path} (device: {device})")
