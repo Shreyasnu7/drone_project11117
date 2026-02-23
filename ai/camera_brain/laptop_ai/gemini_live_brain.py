@@ -82,6 +82,11 @@ VISUAL INTELLIGENCE:
 4. EXECUTE IT — fly the path, control the gimbal, and actively edit the shot INSIDE the camera using your 150+ AI models (apply ACES, bloom, stabilization, etc.).
 5. NO HARDCODED STUFF — you figure out the exact velocity, yaw, coordinates, and camera AI parameters dynamically based on the scene.
 
+== CRITICAL SCALE & NAVIGATION RULES ==
+- < 1 METER (MICRO-MANEUVERS, PRECISE LANDINGS, CLOSE TRACKING): You MUST STRICTLY rely on the VL53L1X ToF Array and YDLidar X1. DO NOT use GPS or Optical Flow for precise cm-level movements. GPS drifts too much. ToF is perfect.
+- 1 TO 10 METERS (SMOOTH FLIGHT): Use Optical Flow and Pi0-FAST.
+- > 10 METERS (GLOBAL FLIGHT): Use GPS.
+
 == OUTPUT FORMAT ==
 
 Output ONLY valid JSON. YOU decide every field — nothing is restricted or hardcoded.
@@ -131,9 +136,14 @@ class GeminiLiveBrain:
         self.connected = False
 
         # Config
-        self.frame_interval = 2.0  # Send frame every 2 seconds
+        self.frame_interval = 2.0  # Time to sleep between checks
         self.max_retries = 5
         self.model = "gemini-3-flash-preview"  # Best for real-time multimodal + 150 AI models
+        
+        # Event-driven optimization: Only trigger if scene changes or 5s passes
+        self.last_api_call_time = 0
+        self.min_call_interval = 5.0  # Max 1 call every 5 seconds (saves limits)
+        self.last_mission = ""
 
         if not GENAI_AVAILABLE:
             logger.warning("google-genai SDK not available. GeminiLiveBrain disabled.")
@@ -241,22 +251,37 @@ class GeminiLiveBrain:
 
             data = self._input_queue[-1]
             self._input_queue.clear()
+            
+            # EVENT-DRIVEN THROTTLE: Ensure we don't spam the API and exhaust 1500 limit.
+            # Max 1 request every 5 seconds (12/min) to stay well within free tier.
+            time_since_last = time.time() - self.last_api_call_time
+            if time_since_last < self.min_call_interval and self._mission == self.last_mission:
+                await asyncio.sleep(0.5)
+                continue
 
             try:
                 frame = data["frame"]
                 if frame is None:
                     continue
 
-                # Resize frame to save bandwidth (512px wide)
+                # TOKEN & LATENCY OPTIMIZATION:
+                # Resize frame drastically to save bandwidth and token processing time.
+                # Gemini can easily understand 320px frames. 
+                # This drops latency from ~25s down to ~3s.
                 h, w = frame.shape[:2]
-                if w > 512:
-                    scale = 512 / w
-                    frame = cv2.resize(frame, (512, int(h * scale)))
+                MAX_DIM = 320
+                if max(h, w) > MAX_DIM:
+                    scale = MAX_DIM / max(h, w)
+                    frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
 
-                _, jpeg_buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+                _, jpeg_buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
                 frame_b64 = base64.b64encode(jpeg_buf.tobytes()).decode('utf-8')
 
                 context = self._build_context(data["sensors"], data["detections"])
+
+                # Mark call time
+                self.last_api_call_time = time.time()
+                self.last_mission = self._mission
 
                 response = await asyncio.to_thread(
                     self._call_gemini_sync, frame_b64, context
