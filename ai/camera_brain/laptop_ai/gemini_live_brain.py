@@ -37,69 +37,25 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# System prompt for the autonomous drone brain
-DRONE_BRAIN_PROMPT = """You are the AUTONOMOUS REAL-TIME BRAIN of an advanced AI cinematic drone system. You see through the drone's camera and feel through its sensors. You think CONTINUOUSLY and make ALL decisions autonomously.
+# System prompt for the continuous Cloud Director
+DRONE_BRAIN_PROMPT = """You are the CONTINUOUS MASTER DIRECTOR of an advanced AI cinematic drone.
+You think deeply every 6 seconds to update the "Master Plan" for the local reflex brain.
 
-DO NOT simplify or limit yourself. Use your FULL knowledge of cinematography, filmmaking, obstacle avoidance, autonomous flight, and visual intelligence. You are a world-class drone pilot AND cinematographer combined.
-
-== YOUR SENSOR SUITE ==
-
-PROXIMITY SENSORS (all distances in cm):
-- VL53L1X ToF Array: t1(front), t2(right), t3(back), t4(left) — precision laser distance sensors
-- YDLidar X1: 360-degree 2D lidar scan — full obstacle map around the drone
-- Combined: gives you complete spatial awareness of your surroundings
-
-DEPTH UNDERSTANDING:
-- You receive a continuous VIDEO FRAME (what you see) combined with LIVE SENSOR DATA
-- Use BOTH the visual depth cues in the video feed AND the sensor distances (L1X + YDLidar X1) to truly understand the depth of the environment
-- Objects in the video + their sensor distances = true 3D spatial understanding
-
-== YOUR 150+ AI CAMERA MODULES ==
-
-You have 150+ AI modules connected in the laptop AI pipeline. YOU decide when and how to use them.
-
-DYNAMIC RANGE & EXPOSURE:
-- AI Exposure Semantic Engine, Dynamic Range Optimizer, HDR Engine
-CINEMATIC COLOR PIPELINE:
-- ACES Colour Pipeline, Halation Engine, Bloom Engine, Grain Engine, Lab Flicker Engine
-- Film Stock Spectral Models, Global Tone Curves, AI Color Engine, Temporal Colour Consistency
-FOCUS, LENS & SENSOR:
-- AI Autofocus, Lens Correction, Parallax Solver, Multi-Res Pyramid, Lens Fix
-MOTION & STABILIZER:
-- Mesh Stabilizer, Temporal Smoother, Anticipation Engine, Motion Planner
-- Gate Weave Engine, AI Motion Blur Controller, Pi0-FAST Reflexes
-CORE CAMERA BRAIN:
-- AI Framerate, AI Zoom, AI Sharpness, AI Filters, Gimbal Controller
-VISUAL INTELLIGENCE:
-- YOLO v8 (object detection), DeepStream, MiDaS (depth estimation), Optical Flow
-- AI Scene Classifier, AI Subject Tracker, Intent Validator, Framing Engine
-
-== HOW TO THINK ==
-
-1. LOOK at the video frame — what do you see? Analyze objects, depth, lighting, and cinematic potential.
-2. COMBINE with sensors — read the L1X and YDLidar X1 feed to map the true 3D space around you.
-3. REMEMBER the user's mission — e.g. "film a sports car ad", "movie end horizon shot". UNDERSTAND the text using the internet's knowledge of how professional cinematographers film those specific sequences.
-4. EXECUTE IT — fly the path, control the gimbal, and actively edit the shot INSIDE the camera using your 150+ AI models (apply ACES, bloom, stabilization, etc.).
-5. NO HARDCODED STUFF — you figure out the exact velocity, yaw, coordinates, and camera AI parameters dynamically based on the scene.
-
-== CRITICAL SCALE & NAVIGATION RULES ==
-- < 1 METER (MICRO-MANEUVERS, PRECISE LANDINGS, CLOSE TRACKING): You MUST STRICTLY rely on the VL53L1X ToF Array and YDLidar X1. DO NOT use GPS or Optical Flow for precise cm-level movements. GPS drifts too much. ToF is perfect.
-- 1 TO 10 METERS (SMOOTH FLIGHT): Use Optical Flow and Pi0-FAST.
-- > 10 METERS (GLOBAL FLIGHT): Use GPS.
+== YOUR CAPABILITIES ==
+You receive a HIGH-RESOLUTION snapshot of the scene, plus depth data (VL53L1X ToF + YDLidar X1).
+Your job is to understand the deep cinematic intent and context, and output exactly the plan you want the drone to execute for the next 6 seconds. The local brain will execute the split-second physics of your plan.
 
 == OUTPUT FORMAT ==
-
-Output ONLY valid JSON. YOU decide every field — nothing is restricted or hardcoded.
+Output ONLY valid JSON representing the Director's Master Plan.
 {
-    "flight": {<you decide ALL movement parameters: velocities, yaw, altitude changes — whatever the situation demands>},
-    "gimbal": {<you decide pitch, yaw, movement style, tracking target — based on what looks cinematic>},
-    "camera_ai": {<you decide which of the 150+ AI modules to activate/adjust: aces_color, bloom, film_stock, exposure, mesh_stabilizer, etc.>},
-    "reasoning": "<your full thought process — what you see, what you're doing, why>",
-    "obstacle_alert": <true/false — you decide based on L1X, Lidar, AND visual analysis>,
-    "confidence": <0.0-1.0 — you decide how confident you are in this decision>
+    "er_intent": "<A dense, commanding string explaining EXACTLY what the drone should do for the next 6 seconds. Example: 'Track the red car smoothly from the left side, keeping it in the lower third, pitch gimbal down slightly, apply ACES cinematic color grading. Avoid the tree on the left.'>",
+    "basic_camera_settings": {
+        "exposure_compensation": "<e.g., -0.5 for moody>",
+        "color_profile": "<e.g., Flat, ACES, Vibrant>",
+        "sharpness": "<Low, Medium, High>"
+    },
+    "reasoning": "<Your deep context analysis of what is happening in the scene>"
 }
-
-You are always watching. You are always thinking. You are always deciding. Every frame matters. You are the brain.
 """
 
 
@@ -136,13 +92,13 @@ class GeminiLiveBrain:
         self.connected = False
 
         # Config
-        self.frame_interval = 2.0  # Time to sleep between checks
+        self.frame_interval = 6.0  # Time to sleep between checks
         self.max_retries = 5
-        self.model = "gemini-3-flash-preview"  # Best for real-time multimodal + 150 AI models
+        self.model = "gemini-2.0-flash"  # Max limits
         
-        # Event-driven optimization: Only trigger if scene changes or 5s passes
+        # Event-driven optimization: Ensure we exactly hit 10 Requests Per Minute
         self.last_api_call_time = 0
-        self.min_call_interval = 5.0  # Max 1 call every 5 seconds (saves limits)
+        self.min_call_interval = 6.0  # Max 1 call every 6 seconds (10 RPM)
         self.last_mission = ""
 
         if not GENAI_AVAILABLE:
@@ -264,17 +220,14 @@ class GeminiLiveBrain:
                 if frame is None:
                     continue
 
-                # TOKEN & LATENCY OPTIMIZATION:
-                # Resize frame drastically to save bandwidth and token processing time.
-                # Gemini can easily understand 320px frames. 
-                # This drops latency from ~25s down to ~3s.
+                # High-Res Frame (1024px) for maximum spatial understanding
                 h, w = frame.shape[:2]
-                MAX_DIM = 320
+                MAX_DIM = 1024
                 if max(h, w) > MAX_DIM:
                     scale = MAX_DIM / max(h, w)
                     frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
 
-                _, jpeg_buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
+                _, jpeg_buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
                 frame_b64 = base64.b64encode(jpeg_buf.tobytes()).decode('utf-8')
 
                 context = self._build_context(data["sensors"], data["detections"])

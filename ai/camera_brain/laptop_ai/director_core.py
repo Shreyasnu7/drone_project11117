@@ -82,7 +82,7 @@ from laptop_ai.camera_director import CameraDirector
 # WIRED: ADVANCED AI MODELS (DeepStream, Pi0, Gemini)
 from laptop_ai.deepstream_handler import DeepStreamHandler
 from laptop_ai.pi0_pilot import Pi0Pilot
-# from laptop_ai.gemini_live_brain import GeminiLiveBrain # REMOVED
+from laptop_ai.gemini_live_brain import GeminiLiveBrain
 from core.state import EnvironmentState
 from outputs.camera_command import CameraCommand
 from local_er_brain import LocalERBrain  # Replaces gemini_live_brain
@@ -458,9 +458,12 @@ class DirectorCore:
         except:
            self.autopilot = MavlinkExecutor()
 
-        # TWO-BRAIN ARCHITECTURE: Brain 1 (Local ER)
-        # Brain 2 (Gemini 3 Flash Cloud) sends intents to this local brain
+        # TWO-BRAIN ARCHITECTURE: 
+        # Brain 1 (Qwen Local ER - 0.1s)
         self.er_brain = LocalERBrain()
+        # Brain 2 (Gemini Cloud ER - 6.0s Mastermind)
+        self.gemini_brain = GeminiLiveBrain(api_key=os.getenv("GEMINI_API_KEY"))
+        
         self._brain_override = True  # ER Brain takes precedence on navigation
            
         print(f"✅ Advanced AI Models Instantiated (Pi0: {self.pi0_pilot.model_type}, DS: {self.deepstream.mode}, Brain: ONLINE)")
@@ -496,6 +499,10 @@ class DirectorCore:
         # Start Local ER Brain Model in background thread
         if hasattr(self, 'er_brain'):
             self.er_brain.connect()
+            
+        # Start Gemini Continuous Mastermind
+        if hasattr(self, 'gemini_brain'):
+            self.gemini_brain.connect()
 
     def _load_cinematic_library(self):
         """
@@ -828,6 +835,23 @@ class DirectorCore:
                         
                         if frame_id % 90 == 0:  # Log status every ~3 seconds
                             print(f"🧠 ER Brain: {decision.get('reasoning', '')[:100]}")
+
+            # 4b. GEMINI CONTINUOUS DIRECTOR (gemini-2.0-flash)
+            if hasattr(self, 'gemini_brain') and self.gemini_brain and self.gemini_brain.connected:
+                # Feed frame + sensor data to Gemini Director
+                self.gemini_brain.feed(raw_frame, sensor_state, det_list)
+                
+                # Check for new deep master plans
+                if frame_id % 30 == 0:  # Check occasionally
+                    decision = self.gemini_brain.get_latest_decision()
+                    if decision and "er_intent" in decision:
+                        # Forward the new 6-second deep plan to the Local ER brain
+                        if hasattr(self, 'er_brain') and self.er_brain:
+                            self.er_brain.set_director_intent(
+                                f"[Gemini 6s Director Plan] {decision['er_intent']} | Basic Cam: {decision.get('basic_camera_settings', {})}"
+                            )
+                        if frame_id % 90 == 0:
+                            print(f"🎬 [GEMINI DIRECTOR UPDATE]: {decision.get('reasoning', '')[:100]}")
 
             # RENDER (Handled inline below)
             
