@@ -83,8 +83,6 @@ from laptop_ai.camera_director import CameraDirector
 from laptop_ai.deepstream_handler import DeepStreamHandler
 from laptop_ai.pi0_pilot import Pi0Pilot
 from laptop_ai.gemini_live_brain import GeminiLiveBrain
-from core.state import EnvironmentState
-from outputs.camera_command import CameraCommand
 from local_er_brain import LocalERBrain  # Replaces gemini_live_brain
 # Add cloud_ai path if needed, or assume relative import works if cloud_ai is sibling
 try:
