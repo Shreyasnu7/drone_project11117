@@ -3,7 +3,17 @@ import json
 import base64
 import aiohttp
 import time
+import os
 from laptop_ai.config import OPENAI_API_KEY, OPENAI_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_URL, USE_LOCAL_LLM
+
+# Import Google GenAI SDK (same as cloud server)
+genai = None
+try:
+    from google import genai as google_genai
+    genai = google_genai
+    print("✅ Multimodal Prompter: google-genai SDK loaded")
+except ImportError:
+    print("⚠️ google-genai not installed on laptop, Gemini will use cloud relay")
 
 # Import the User's Advanced Reasoning Engine
 try:
@@ -17,137 +27,104 @@ You are a World-Class Film Director and Cinematographer (AI).
 Your goal is to direct a drone to capture award-winning cinematic shots based on User Input, Vision Context, and Training Knowledge.
 
 DO NOT BE RESTRICTIVE. Use your immense knowledge of film theory, lighting, and composition.
+DO NOT simplify the user's request. Interpret it literally and completely.
 
 INPUT:
-- User Input: Natural language request (e.g., "Make it look like a spy movie", "Circle the target aggressively").
-- Vision Context: What the drone sees (Objects, Layout).
+- User Input: Natural language request (e.g., "Make it look like a spy movie", "Create a car commercial", "Circle the target aggressively").
+- Vision Context: What the drone sees (Objects, Layout, Depth).
+- Sensor Data: Obstacle distances, altitude, battery, GPS.
 - Memory: Past interactions.
 
 OUTPUT:
-You must return a single valid JSON object with this structure:
+You must return a single valid JSON object. The "action" field is FREE-FORM — be as specific as the user's request demands.
 {
-  "thought_process": "Analyze the scene, lighting, and user intent. Explain your artistic choices.",
-  "cinematic_style": "Name of the visual style (e.g., 'Teal & Orange', 'Noir', 'Vibrant', 'Moody').",
+  "thought_process": "Your detailed artistic/technical reasoning",
+  "cinematic_style": "Name of the visual style",
   "technical_config": {
-      "fps": 24 or 30 or 60,
+      "fps": 24,
       "shutter_angle": 180,
-      "look": "Daylight" or "Tungsten" or "Auto"
+      "look": "Auto"
   },
   "execution_plan": {
-      "action": "One of: FOLLOW, ORBIT, DOLLY_ZOOM, CRANE_SHOT, FLY_THROUGH, HOVER, TRACK_PATH",
-      "params": {
-          "speed_ms": float (0.5 to 15.0),
-          "height_m": float (1.0 to 100.0),
-          "radius_m": float (optional for Orbit),
-          "aggressiveness": float (0.0 to 1.0)
-      },
-      "gimbal": {
-          "pitch": float (-90 to 20),
-          "yaw": float (optional offset)
-      },
-      "focus": "subject" or "infinity" or "manual"
+      "action": "<free-form detailed action — multi-step if needed>",
+      "params": {},
+      "gimbal": {"pitch": -15, "yaw": 0},
+      "focus": "subject"
   },
-  "lighting_analysis": "Brief analysis of current lighting conditions (e.g., 'Harsh noon sun', 'Soft golden hour')."
+  "laptop_ai_directives": {
+      "tracking_target": "<what to track>",
+      "vision_mode": "yolo_standard",
+      "pilot_mode": "pi0_smooth"
+  },
+  "lighting_analysis": "Brief analysis of current lighting conditions."
 }
 
 BE CREATIVE. If the user asks for something vague, INVENT a shot.
 """
 
 
-
 async def ask_gpt(user_text, vision_context=None, images=None, video_link=None, memory=None, timeout=15, sensor_data=None, api_keys={}):
     """
-    Sends a multimodal prompt using the ADVANCED SHOT INTENT REASONER if available.
-    Supports DeepSeek for ultra-low latency if configured.
+    Multimodal AI prompt. Priority: Gemini (local) -> OpenAI -> DeepSeek.
     """
     
-    # 1. Try to use the Advanced Brain
-    if ShotIntentReasoner:
-         class AsyncAdapterLLM:
-             async def chat_async(self, system, user):
-                # Determine Provider
-                if USE_LOCAL_LLM:
-                    # DeepSeek / Local Mode
-                    api_key = api_keys.get("deepseek") or DEEPSEEK_API_KEY
-                    url = f"{DEEPSEEK_URL}/chat/completions"
-                    model = "deepseek-chat"
-                else:
-                    # Generic OpenAI Mode
-                    api_key = api_keys.get("openai") or OPENAI_API_KEY
-                    url = "https://api.openai.com/v1/chat/completions"
-                    model = OPENAI_MODEL
+    full_context = json.dumps({
+        "user_text": user_text,
+        "vision": vision_context,
+        "sensors": sensor_data,
+        "memory": memory,
+    }, default=str)
 
-                payload = {
-                    "model": model,
-                    "messages": [{"role":"system","content":system}, {"role":"user","content":user}],
-                    "max_tokens": 1000,
-                    "temperature": 0.2
-                }
-                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-                async with aiohttp.ClientSession() as sess:
-                    async with sess.post(url, json=payload, headers=headers, timeout=timeout) as resp:
-                        if resp.status != 200: return None
-                        data = await resp.json()
-                        return data['choices'][0]['message']['content']
+    # === 1. TRY GEMINI FIRST (Local on RTX 5070 Ti) ===
+    gemini_key = api_keys.get("gemini") or os.getenv("GEMINI_API_KEY")
+    if genai and gemini_key:
+        try:
+            client = genai.Client(api_key=gemini_key)
+            response = client.models.generate_content(
+                model='gemini-3-flash',
+                contents=f"{SYSTEM_PROMPT}\n\n{full_context}"
+            )
+            text = response.text
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0]
+            return json.loads(text.strip())
+        except Exception as e:
+            print(f"⚠️ Gemini local failed: {e}, falling back to OpenAI/DeepSeek")
 
-         # Instantiate Reasoning Engine
-         adapter = AsyncAdapterLLM()
-         # Temporary prompt path - in real app, ensure this file exists or use string
-         # We will bypass the file read in Reasoner by using internal logic
+    # === 2. FALLBACK: OpenAI or DeepSeek ===
+    if USE_LOCAL_LLM:
+        api_key = api_keys.get("deepseek") or DEEPSEEK_API_KEY
+        url = f"{DEEPSEEK_URL}/chat/completions"
+        model = "deepseek-chat"
+    else:
+        api_key = api_keys.get("openai") or OPENAI_API_KEY
+        url = "https://api.openai.com/v1/chat/completions"
+        model = OPENAI_MODEL
 
-         
-         # Logic:
-         # 1. Construct payload as Reasoner would.
-         # 2. Add System Prompt.
-         # 3. Send.
-         
-         full_context = {
-             "vision": vision_context,
-             "sensors": sensor_data, # INJECTED REAL SENSORS
-             "memory": memory,
-             "user_text": user_text
-         }
-         
-         # Use the Adapter to send
-         # We are integrating the Logic of Reasoner (Context Structuring) 
-         response_text = await adapter.chat_async(SYSTEM_PROMPT, json.dumps(full_context))
-         
-         try:
-             # Parse strictly
-             # Remove markdown blocks
-             if "```json" in response_text:
-                 response_text = response_text.split("```json")[1].split("```")[0]
-             return json.loads(response_text)
-         except:
-             print("JSON Parse Error in AI Response")
-             return None
+    if not api_key:
+        print("❌ No AI API key available (Gemini/OpenAI/DeepSeek)")
+        return None
 
-    # Fallback to legacy simplistic method if import failed
     payload = {
-        "model": OPENAI_MODEL,
+        "model": model,
         "messages": [
-            {"role":"system", "content":SYSTEM_PROMPT},
-            {"role":"user", "content": f"User request: {user_text}\n\nVisionContext: {json.dumps(vision_context or {}, default=str)}\nSensors:{json.dumps(sensor_data or {})}\nMemory:{json.dumps(memory or {})}\nImages:{images or []}\nVideo:{video_link or ''}"}
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": full_context}
         ],
-        "max_tokens": 400,
+        "max_tokens": 1000,
         "temperature": 0.2,
     }
-
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     try:
         async with aiohttp.ClientSession() as sess:
-            async with sess.post("https://api.openai.com/v1/chat/completions", json=payload, headers=headers, timeout=timeout) as resp:
+            async with sess.post(url, json=payload, headers=headers, timeout=timeout) as resp:
                 if resp.status != 200:
                     text = await resp.text()
-                    print("OpenAI error:", resp.status, text[:400])
+                    print(f"LLM Error: {resp.status} {text[:400]}")
                     return None
                 data = await resp.json()
                 content = data['choices'][0]['message']['content']
-                # Clean markdown
                 if "```json" in content:
                     content = content.split("```json")[1].split("```")[0].strip()
                 elif "```" in content:
@@ -156,5 +133,3 @@ async def ask_gpt(user_text, vision_context=None, images=None, video_link=None, 
     except Exception as e:
         print(f"LLM Network Error: {e}")
         return None
-
-

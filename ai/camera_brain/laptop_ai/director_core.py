@@ -449,16 +449,18 @@ class DirectorCore:
         # INSTANTIATE ADVANCED AI MODELS (NVIDIA/DeepStream/Pi0/Gemini)
         print("🚀 Initializing High-Performance AI Stack...")
         self.deepstream = DeepStreamHandler(RTSP_URL)
-        # self.deepstream.start() # Start 200fps loop (Optional: enabled by task)
+        self.deepstream.start()  # Start detection pipeline (DeepStream or YOLO fallback)
         
         self.pi0_pilot = Pi0Pilot()
+        self._pi0_commands = None  # Latest Pi0 output
+        self._pi0_active = False   # Set True when Pi0 should control the drone
         
         try:
            self.gemini = GeminiDirector(api_key=os.getenv("GEMINI_API_KEY"))
         except:
            self.gemini = None
            
-        print("✅ Advanced AI Models Instantiated.")
+        print(f"✅ Advanced AI Models Instantiated (Pi0: {self.pi0_pilot.model_type}, DS: {self.deepstream.mode})")
 
         # Load Cinematic Assets
         self._load_cinematic_library()
@@ -720,30 +722,144 @@ class DirectorCore:
                  video_out = cv2.VideoWriter(out_path, fourcc, 30.0, (w, h))
                  print(f"⏺️  Recording Started: {out_path} ({w}x{h})")
 
-            # 3. AI INFERENCE (YOLO + DeepStream Adapter)
+            # 3. AI INFERENCE — DeepStream (primary) or YOLO (fallback)
             detections = []
-            if self.threaded_yolo:
+            det_source = "none"
+            
+            # Try DeepStream first (100+ FPS when GPU pipeline is active)
+            if hasattr(self, 'deepstream') and self.deepstream and self.deepstream.mode == "deepstream":
+                ds_dets = self.deepstream.get_detections()
+                if ds_dets:
+                    detections = ds_dets  # Format: [class, cx, cy, w, h, conf]
+                    det_source = "deepstream"
+            
+            # Fall back to ThreadedYOLO (30-60 FPS)
+            if not detections and self.threaded_yolo:
                 self.threaded_yolo.update(raw_frame)
                 detections = self.threaded_yolo.get_latest_detections()
+                det_source = "yolo"
+            
+            # Also try DeepStream YOLO fallback if ThreadedYOLO didn't work
+            if not detections and hasattr(self, 'deepstream') and self.deepstream and self.deepstream.mode == "yolo":
+                ds_dets = self.deepstream.get_detections(frame=raw_frame)
+                if ds_dets:
+                    detections = ds_dets
+                    det_source = "deepstream_yolo"
                 
-                if frame_id == 0:
-                    dev_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
-                    print(f"🔥 GPU INFERENCE RUNNING: {len(detections)} objects | Device: {dev_name} | Source: {current_source.upper()}")
+            if frame_id == 0:
+                dev_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
+                ds_fps = self.deepstream.get_fps() if hasattr(self, 'deepstream') and self.deepstream else 0
+                print(f"🔥 GPU INFERENCE RUNNING: {len(detections)} objects | Device: {dev_name} | Source: {current_source.upper()} | Detector: {det_source} | DS FPS: {ds_fps:.0f}")
 
             # 4. Pi0-FAST PILOT (Reflexes) - 50Hz Control
-            # Send frame to Pi0 Pilot model for immediate control response
             if hasattr(self, 'pi0_pilot') and self.pi0_pilot:
-                # self.pi0_pilot.update(raw_frame, detections)
-                # commands = self.pi0_pilot.get_commands()
-                pass
+                # Build state vector from detections (handles both YOLO and DeepStream format)
+                target_err_x, target_err_y = 0.0, 0.0
+                if detections and len(detections) > 0:
+                    try:
+                        det = detections[0]
+                        if det_source == "yolo" and hasattr(det, 'xyxy'):
+                            # YOLO ultralytics format
+                            cx = float(det.xyxy[0][0] + det.xyxy[0][2]) / 2
+                            cy = float(det.xyxy[0][1] + det.xyxy[0][3]) / 2
+                        elif isinstance(det, (list, tuple)) and len(det) >= 4:
+                            # DeepStream format: [class, cx, cy, w, h, conf]
+                            cx = float(det[1])
+                            cy = float(det[2])
+                        else:
+                            cx, cy = w/2, h/2
+                        target_err_x = (cx - w/2) / (w/2)  # Normalized -1 to 1
+                        target_err_y = (cy - h/2) / (h/2)
+                    except:
+                        pass
+                
+                env = getattr(self, 'current_environment_state', {})
+                pi0_state = {
+                    'target_err_x': target_err_x,
+                    'target_err_y': target_err_y,
+                    'vx': env.get('speed', 0),
+                    'vy': 0,
+                    'x': 0, 'y': 0,
+                    'depth_dist': env.get('tof_front', 9999) / 1000.0,
+                    'altitude': env.get('altitude', 0),
+                    'heading': env.get('heading', 0),
+                }
+                pi0_commands = self.pi0_pilot.update(pi0_state)
+                self._pi0_commands = pi0_commands
+                
+                # === ROUTE Pi0 OUTPUT TO FLIGHT CONTROLLER ===
+                if self._pi0_active and pi0_commands and hasattr(self, 'autopilot'):
+                    if pi0_commands.get('emergency'):
+                        # Emergency brake — immediate stop
+                        self.autopilot.send_velocity(0, 0, 0)
+                    else:
+                        # Convert roll/pitch to velocity commands
+                        # Roll → lateral (vy), Pitch → forward (vx)
+                        scale = 0.1  # degrees to m/s scaling factor
+                        vx = pi0_commands.get('pitch', 0) * scale
+                        vy = pi0_commands.get('roll', 0) * scale
+                        vz = (pi0_commands.get('throttle', 0.5) - 0.5) * 2.0  # -1 to 1 m/s vertical
+                        self.autopilot.send_velocity(vx, vy, vz)
 
-            # RENDER (If RenderMaster loaded)
             # RENDER (Handled inline below)
-            # if self.render_master:
-            #     pass
             
             if video_out:
                 video_out.write(raw_frame)
+
+            # 4b. CONTEXT UPLINK TO CLOUD AI (every 30 frames ~1/sec)
+            if frame_id % 30 == 0:
+                try:
+                    from laptop_ai.config import API_BASE
+                    det_summary = []
+                    for d in (detections[:10] if detections else []):
+                        try:
+                            if det_source == "yolo" and hasattr(d, 'xyxy'):
+                                b = d.xyxy[0].cpu().numpy().tolist()
+                                det_summary.append({
+                                    'class': int(d.cls[0]),
+                                    'confidence': round(float(d.conf[0]), 2),
+                                    'bbox': [round(x) for x in b]
+                                })
+                            elif isinstance(d, (list, tuple)) and len(d) >= 6:
+                                # DeepStream format: [class, cx, cy, w, h, conf]
+                                det_summary.append({
+                                    'class': int(d[0]),
+                                    'confidence': round(float(d[5]), 2),
+                                    'bbox': [round(d[1]-d[3]/2), round(d[2]-d[4]/2), round(d[1]+d[3]/2), round(d[2]+d[4]/2)]
+                                })
+                        except:
+                            pass
+                    
+                    env = getattr(self, 'current_environment_state', {})
+                    context_payload = {
+                        'detected_objects': det_summary,
+                        'scene_type': getattr(self.classifier, 'last_scene', 'unknown') if self.classifier else 'unknown',
+                        'obstacles': {
+                            'front_m': env.get('tof_front', 9999) / 1000.0,
+                            'left_m': env.get('tof_left', 9999) / 1000.0,
+                            'right_m': env.get('tof_right', 9999) / 1000.0,
+                            'rear_m': env.get('tof_back', 9999) / 1000.0,
+                        },
+                        'flight_state': {
+                            'altitude': env.get('altitude', 0),
+                            'speed_ms': env.get('speed', 0),
+                            'battery': env.get('battery', 0),
+                            'heading': env.get('heading', 0),
+                        },
+                        'pi0_mode': self.pi0_pilot.model_type if self.pi0_pilot else 'none',
+                        'detector': det_source,
+                        'detector_fps': self.deepstream.get_fps() if hasattr(self, 'deepstream') and self.deepstream else 0,
+                        'frame_id': frame_id,
+                        'source': current_source,
+                    }
+                    async with aiohttp.ClientSession() as ctx_session:
+                        await ctx_session.post(
+                            f"{API_BASE}/director/ai/context",
+                            json=context_payload,
+                            timeout=aiohttp.ClientTimeout(total=2)
+                        )
+                except Exception:
+                    pass  # Non-critical, don't block vision loop
 
             frame_id += 1
             await asyncio.sleep(0.001)
