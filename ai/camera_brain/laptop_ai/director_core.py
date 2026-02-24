@@ -160,6 +160,12 @@ class ThreadedYOLO:
         with self.lock:
             return self.latest_detections
 
+    def update(self, frame):
+        """Pass a new frame to the background thread for inference."""
+        if frame is not None:
+            with self.lock:
+                self.frame = frame.copy()
+
     def _worker(self):
         while self.running:
             input_frame = None
