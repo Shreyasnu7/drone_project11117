@@ -62,11 +62,14 @@ class Pi0Pilot:
         - throttle: Throttle (0.0 to 1.0)
     """
 
+    # Base directory relative to this file
+    _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    
     # Model file paths (searched in order)
     MODEL_PATHS = [
-        "models/pi0_fast.engine",        # TensorRT engine
-        "models/pi0_fast.onnx",          # ONNX model
-        "models/pi0_fast.pt",            # PyTorch checkpoint
+        os.path.join(_BASE_DIR, "models", "pi0_fast.engine"),        # TensorRT engine
+        os.path.join(_BASE_DIR, "models", "pi0_fast.onnx"),          # ONNX model
+        os.path.join(_BASE_DIR, "models", "pi0_fast.pt"),            # PyTorch checkpoint
     ]
 
     def __init__(self):

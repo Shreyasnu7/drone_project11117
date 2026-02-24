@@ -651,6 +651,10 @@ class DirectorCore:
         
         frame_id = 0
         
+        # Pre-allocate blank frame to prevent Numpy MemoryErrors when RAM is full
+        import numpy as np
+        blank_frame = np.zeros((720, 1280, 3), np.uint8)
+        
         while True:
             t0 = time.time()
             
@@ -676,11 +680,10 @@ class DirectorCore:
             # Handle "No Signal"
             if raw_frame is None:
                 # No Camera -> Show Disconnected Screen
-                import numpy as np
-                blank = np.zeros((720, 1280, 3), np.uint8)
-                cv2.putText(blank, "SEARCHING FOR DRONE VIDEO (UDP)...", (340, 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2)
-                cv2.putText(blank, f"Checking: {internal_src}", (400, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
-                cv2.imshow("Laptop AI Director (RTX 5070 Ti)", blank)
+                blank_frame.fill(0)
+                cv2.putText(blank_frame, "SEARCHING FOR DRONE VIDEO (UDP)...", (340, 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2)
+                cv2.putText(blank_frame, f"Checking: {internal_src}", (400, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
+                cv2.imshow("Laptop AI Director (RTX 5070 Ti)", blank_frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
                 await asyncio.sleep(0.1)
