@@ -686,8 +686,10 @@ class DirectorCore:
                 cv2.imshow("Laptop AI Director (RTX 5070 Ti)", blank_frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
-                await asyncio.sleep(0.1)
-                continue
+                
+                # ENABLE BLIND MODE: Feed the blank frame to the AI so it can purely process Sensor/Telemetry data!
+                raw_frame = blank_frame.copy()
+                await asyncio.sleep(0.05)  # Cap at 20fps to prevent CPU spam
             
             # Resize check (if stream changed)
             h, w = raw_frame.shape[:2]
