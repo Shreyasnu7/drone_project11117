@@ -241,9 +241,7 @@ class GeminiLiveBrain:
                 self.last_api_call_time = time.time()
                 self.last_mission = self._mission
 
-                response = await asyncio.to_thread(
-                    self._call_gemini_sync, frame_b64, context
-                )
+                response = await self._call_gemini_async(frame_b64, context)
 
                 if response:
                     self._set_decision(response)
@@ -257,8 +255,8 @@ class GeminiLiveBrain:
 
             await asyncio.sleep(self.frame_interval)
 
-    def _call_gemini_sync(self, frame_b64: str, context: str) -> dict:
-        """Synchronous Gemini call with image + text. Run in thread."""
+    async def _call_gemini_async(self, frame_b64: str, context: str) -> dict:
+        """Native Async Gemini call with image + text to prevent httpx thread leaks."""
         try:
             image_part = genai_types.Part.from_bytes(
                 data=base64.b64decode(frame_b64),
@@ -267,8 +265,8 @@ class GeminiLiveBrain:
 
             prompt = f"{DRONE_BRAIN_PROMPT}\n\n{context}\n\nAnalyze the image and sensor data. Think deeply. Output JSON only."
 
-            with google_genai.Client(api_key=self.api_key) as client:
-                response = client.models.generate_content(
+            async with google_genai.Client(api_key=self.api_key) as client:
+                response = await client.aio.models.generate_content(
                     model=self.model,
                     contents=[prompt, image_part]
                 )
