@@ -274,7 +274,10 @@ class GeminiLiveBrain:
             text = response.text.strip()
             text = text.replace("```json", "").replace("```", "").strip()
 
-            return json.loads(text)
+            data = json.loads(text)
+            if isinstance(data, list) and len(data) > 0:
+                data = data[0]
+            return data
 
         except json.JSONDecodeError as e:
             logger.warning(f"🧠 Gemini returned non-JSON: {e}")

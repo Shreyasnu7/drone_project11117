@@ -145,6 +145,8 @@ class LocalERBrain:
                     
                 # Convert BGR to RGB for PiL/Qwen
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                from PIL import Image
+                pil_img = Image.fromarray(rgb_frame)
                 
                 sensor_text = self._build_sensor_text(data["sensors"], data["detections"])
                 
@@ -152,8 +154,8 @@ class LocalERBrain:
                     {
                         "role": "user",
                         "content": [
-                            # We pass the image as a tensor/numpy array via the processor
-                            {"type": "image", "image": rgb_frame},
+                            # We pass the image as a PIL Image via the processor
+                            {"type": "image", "image": pil_img},
                             {"type": "text", "text": f"{ER_BRAIN_PROMPT}\n\nSENSOR DATA:\n{sensor_text}\n\nDecide immediately based on the image and sensors. Output JSON only."}
                         ]
                     }
