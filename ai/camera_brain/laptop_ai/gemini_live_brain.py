@@ -109,7 +109,8 @@ class GeminiLiveBrain:
             logger.warning("No GEMINI_API_KEY found. GeminiLiveBrain disabled.")
             return
 
-        self.client = google_genai.Client(api_key=self.api_key)
+        # We now instantiate the client per-request in _call_gemini_sync 
+        # to prevent httpx "Unclosed connection" spam
         logger.info("✅ GeminiLiveBrain initialized")
 
     def set_mission(self, mission_text: str):
@@ -266,17 +267,25 @@ class GeminiLiveBrain:
 
             prompt = f"{DRONE_BRAIN_PROMPT}\n\n{context}\n\nAnalyze the image and sensor data. Think deeply. Output JSON only."
 
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=[prompt, image_part]
-            )
+            with google_genai.Client(api_key=self.api_key) as client:
+                response = client.models.generate_content(
+                    model=self.model,
+                    contents=[prompt, image_part]
+                )
 
             text = response.text.strip()
             text = text.replace("```json", "").replace("```", "").strip()
 
             data = json.loads(text)
-            if isinstance(data, list) and len(data) > 0:
+            
+            # Robust unwrap: recursively dig until we find a dictionary
+            while isinstance(data, list) and len(data) > 0:
                 data = data[0]
+                
+            if not isinstance(data, dict):
+                logger.warning(f"🧠 Gemini returned invalid JSON structure: {type(data)}")
+                return {"flight": {"hover": True}, "reasoning": "Invalid JSON structure", "confidence": 0.0}
+                
             return data
 
         except json.JSONDecodeError as e:
